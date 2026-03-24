@@ -3,127 +3,258 @@ import requests
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import time
 
 API_URL = "http://backend:8000/api/v1"
+API_V2_URL = "http://backend:8000/api/v2/memo"
 
-st.set_page_config(page_title="Synthetic Data Generator", layout="wide")
-st.title("Tracelight Synthetic Data Generator")
+st.set_page_config(page_title="Tracelight", layout="wide")
+st.title("Tracelight Synthetic Data & Deliverable Engine")
 
-@st.cache_data(ttl=60)
-def fetch_templates():
-    try:
-        resp = requests.get(f"{API_URL}/templates")
-        resp.raise_for_status()
-        return resp.json()
-    except Exception as e:
-        st.error(f"Failed to fetch templates: {e}")
-        return []
+tab1, tab2 = st.tabs(["Synthetic Data Generator", "Deliverable Engine"])
 
-templates = fetch_templates()
-template_names = [t["name"] for t in templates] + ["Custom"]
-
-st.sidebar.header("Configuration")
-selected_preset = st.sidebar.selectbox("Select a preset", template_names)
-
-use_llm = st.sidebar.checkbox("Use LLM Profiler", value=False)
-nl_scenario = ""
-if use_llm:
-    nl_scenario = st.sidebar.text_area("Natural Language Scenario", 
-                                       "Distressed PE LBO, mid-market European industrials, high leverage, declining margins")
-
-num_entities = st.sidebar.number_input("Num Entities", min_value=1, max_value=10000, value=50)
-time_horizon = st.sidebar.number_input("Time Horizon (Years)", min_value=1, max_value=30, value=5)
-frequency = st.sidebar.selectbox("Frequency", ["monthly", "quarterly", "annual"], index=1)
-
-st.sidebar.subheader("Privacy")
-dp_enabled = st.sidebar.checkbox("Enable Differential Privacy")
-dp_epsilon = st.sidebar.slider("Epsilon", 0.1, 10.0, 1.0)
-
-output_format = st.sidebar.radio("Output Format", ["csv", "json"])
-
-if st.sidebar.button("Generate Synthetic Data", type="primary"):
-    payload = {
-        "scenario": {
-            "natural_language": nl_scenario,
-            "use_llm_profiler": use_llm
-        },
-        "privacy": {
-            "enabled": dp_enabled,
-            "epsilon": dp_epsilon
-        },
-        "output_format": output_format,
-        "seed": 42
-    }
-
-    if not use_llm:
-        if selected_preset == "Custom":
-            st.error("Please select a valid preset or enable LLM Profiler.")
-            st.stop()
-        else:
-            profile = next(t["profile"] for t in templates if t["name"] == selected_preset)
-            profile["num_entities"] = num_entities
-            profile["time_horizon_years"] = time_horizon
-            profile["frequency"] = frequency
-            payload["profile_override"] = profile
-
-    with st.spinner("Generating data..."):
+with tab1:
+    st.header("Phase 1: Synthetic Data Generator")
+    
+    @st.cache_data(ttl=60)
+    def fetch_templates():
         try:
-            resp = requests.post(f"{API_URL}/generate", json=payload)
-            if not resp.ok:
-                st.error(f"Error: {resp.status_code} - {resp.text}")
-                st.stop()
-            result = resp.json()
-            st.success("Data generated successfully!")
-            
-            job_id = result["job_id"]
-            report = result["validation_report"]
-            profile_used = result["profile_used"]
-            var_names = list(profile_used["variables"].keys())
-
-            st.subheader("Data Preview")
-            
-            data_resp = requests.get(f"{API_URL}/download/{job_id}")
-            if output_format == "csv":
-                import io
-                df = pd.read_csv(io.StringIO(data_resp.text))
-            else:
-                import io
-                df = pd.read_json(io.StringIO(data_resp.text), orient="records")
-            
-            st.dataframe(df.head(20))
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.subheader("Distributions")
-                var_to_plot = st.selectbox("Select variable to plot", var_names)
-                fig = px.histogram(df, x=var_to_plot, nbins=50, marginal="box")
-                st.plotly_chart(fig, use_container_width=True)
-
-            with col2:
-                st.subheader("Correlation Matrix (Empirical)")
-                corr_matrix = df[var_names].corr()
-                fig2 = px.imshow(corr_matrix, text_auto=".2f", aspect="auto", color_continuous_scale="RdBu_r")
-                st.plotly_chart(fig2, use_container_width=True)
-
-            with st.expander("Validation Report", expanded=True):
-                st.write(f"**Rows generated:** {report['row_count']}")
-                st.write(f"**Correlation RMSE:** {report['correlation_rmse']}")
-                
-                if report['dp_applied']:
-                    st.write(f"**Differential Privacy Applied:** Epsilon = {report['dp_epsilon']}")
-                    st.write(f"**Post-DP KS Tests Passed:** {report['post_dp_ks_all_passed']}")
-                
-                st.write("### KS Test Results")
-                ks_df = pd.DataFrame(report['ks_tests']).T
-                st.dataframe(ks_df)
-
-            st.download_button(
-                label=f"Download {output_format.upper()}",
-                data=data_resp.content,
-                file_name=f"synthetic_data_{job_id}.{output_format}",
-                mime=f"text/{output_format}" if output_format == "csv" else "application/json"
-            )
-
+            resp = requests.get(f"{API_URL}/templates")
+            resp.raise_for_status()
+            return resp.json()
         except Exception as e:
-            st.error(f"Error generating data: {e}")
+            st.error(f"Failed to fetch templates: {e}")
+            return []
+
+    templates = fetch_templates()
+    template_names = [t["name"] for t in templates] + ["Custom"]
+
+    selected_preset = st.selectbox("Select a preset", template_names, key="preset")
+
+    use_llm = st.checkbox("Use LLM Profiler", value=False, key="use_llm")
+    nl_scenario = ""
+    if use_llm:
+        nl_scenario = st.text_area("Natural Language Scenario", 
+                                        "Distressed PE LBO, mid-market European industrials, high leverage, declining margins", key="nl")
+
+    col_cfg1, col_cfg2, col_cfg3 = st.columns(3)
+    with col_cfg1:
+        num_entities = st.number_input("Num Entities", min_value=1, max_value=10000, value=50)
+    with col_cfg2:
+        time_horizon = st.number_input("Time Horizon (Years)", min_value=1, max_value=30, value=5)
+    with col_cfg3:
+        frequency = st.selectbox("Frequency", ["monthly", "quarterly", "annual"], index=1)
+
+    st.subheader("Privacy")
+    col_priv1, col_priv2 = st.columns(2)
+    with col_priv1:
+        dp_enabled = st.checkbox("Enable Differential Privacy", key="dp")
+    with col_priv2:
+        dp_epsilon = st.slider("Epsilon", 0.1, 10.0, 1.0, key="eps")
+
+    output_format = st.radio("Output Format", ["csv", "json"], key="fmt")
+
+    if st.button("Generate Synthetic Data", type="primary", key="gen1"):
+        payload = {
+            "scenario": {
+                "natural_language": nl_scenario,
+                "use_llm_profiler": use_llm
+            },
+            "privacy": {
+                "enabled": dp_enabled,
+                "epsilon": dp_epsilon
+            },
+            "output_format": output_format,
+            "seed": 42
+        }
+
+        if not use_llm:
+            if selected_preset == "Custom":
+                st.error("Please select a valid preset or enable LLM Profiler.")
+                st.stop()
+            else:
+                profile = next(t["profile"] for t in templates if t["name"] == selected_preset)
+                profile["num_entities"] = num_entities
+                profile["time_horizon_years"] = time_horizon
+                profile["frequency"] = frequency
+                payload["profile_override"] = profile
+
+        with st.spinner("Generating data..."):
+            try:
+                resp = requests.post(f"{API_URL}/generate", json=payload)
+                if not resp.ok:
+                    st.error(f"Error: {resp.status_code} - {resp.text}")
+                    st.stop()
+                result = resp.json()
+                st.success("Data generated successfully!")
+                
+                job_id = result["job_id"]
+                st.session_state["last_job_id"] = job_id
+                
+                report = result["validation_report"]
+                profile_used = result["profile_used"]
+                var_names = list(profile_used["variables"].keys())
+
+                st.subheader("Data Preview")
+                
+                data_resp = requests.get(f"{API_URL}/download/{job_id}")
+                if output_format == "csv":
+                    import io
+                    df = pd.read_csv(io.StringIO(data_resp.text))
+                else:
+                    import io
+                    df = pd.read_json(io.StringIO(data_resp.text), orient="records")
+                
+                st.dataframe(df.head(20))
+
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.subheader("Distributions")
+                    var_to_plot = st.selectbox("Select variable to plot", var_names)
+                    fig = px.histogram(df, x=var_to_plot, nbins=50, marginal="box")
+                    st.plotly_chart(fig, use_container_width=True)
+
+                with col2:
+                    st.subheader("Correlation Matrix (Empirical)")
+                    corr_matrix = df[var_names].corr()
+                    fig2 = px.imshow(corr_matrix, text_auto=".2f", aspect="auto", color_continuous_scale="RdBu_r")
+                    st.plotly_chart(fig2, use_container_width=True)
+
+                with st.expander("Validation Report", expanded=True):
+                    st.write(f"**Rows generated:** {report['row_count']}")
+                    st.write(f"**Correlation RMSE:** {report['correlation_rmse']}")
+                    
+                    if report['dp_applied']:
+                        st.write(f"**Differential Privacy Applied:** Epsilon = {report['dp_epsilon']}")
+                        st.write(f"**Post-DP KS Tests Passed:** {report['post_dp_ks_all_passed']}")
+                    
+                    st.write("### KS Test Results")
+                    ks_df = pd.DataFrame(report['ks_tests']).T
+                    st.dataframe(ks_df)
+
+                st.download_button(
+                    label=f"Download {output_format.upper()}",
+                    data=data_resp.content,
+                    file_name=f"synthetic_data_{job_id}.{output_format}",
+                    mime=f"text/{output_format}" if output_format == "csv" else "application/json"
+                )
+
+            except Exception as e:
+                st.error(f"Error generating data: {e}")
+
+with tab2:
+    st.header("Phase 2: Deliverable Engine")
+    
+    st.subheader("1. Upload Sources (Qualitative Context)")
+    uploaded_files = st.file_uploader("Upload CIM, Management Presentations, Expert Calls (PDF/DOCX/TXT)", accept_multiple_files=True)
+    if st.button("Process Documents", key="proc_docs"):
+        if not uploaded_files:
+            st.warning("Please upload at least one file.")
+        else:
+            with st.spinner("Processing and vectorizing documents..."):
+                files = [("files", (f.name, f.getvalue(), f.type)) for f in uploaded_files]
+                resp = requests.post(f"{API_V2_URL}/upload-sources", files=files)
+                if resp.ok:
+                    session_id = resp.json()["session_id"]
+                    st.session_state["session_id"] = session_id
+                    st.success(f"Documents indexed! Session ID: {session_id}")
+                else:
+                    st.error(f"Error: {resp.status_code}")
+    
+    st.subheader("2. Financial Data")
+    fin_job_id = st.text_input("Financial Data Job ID (from Phase 1)", value=st.session_state.get("last_job_id", ""))
+    
+    st.subheader("3. Configure Memo")
+    firm_name = st.text_input("Firm Name", "Acme Capital")
+    memo_type = st.selectbox("Memo Type", ["both", "ic_memo", "exec_deck"])
+    
+    st.write("Sections to Include:")
+    sec_exec = st.checkbox("Executive Summary", True)
+    sec_thesis = st.checkbox("Investment Thesis", True)
+    sec_market = st.checkbox("Market Analysis", True)
+    sec_financial = st.checkbox("Financial Projections", True)
+    sec_deal = st.checkbox("Deal Structure", True)
+    sec_risk = st.checkbox("Risk Mitigation", True)
+    
+    confidence_thresh = st.slider("Confidence Threshold", 0.0, 1.0, 0.7)
+    
+    if st.button("Generate Deliverables", type="primary", key="gen2"):
+        if "session_id" not in st.session_state:
+            st.warning("No session found. Please upload source documents or enter a session ID manually if supported.")
+            session_id = str(int(time.time()))
+            st.session_state["session_id"] = session_id
+            
+        sections = []
+        if sec_exec: sections.append("executive_summary")
+        if sec_thesis: sections.append("investment_thesis")
+        if sec_market: sections.append("market_analysis")
+        if sec_financial: sections.append("financial_projections")
+        if sec_deal: sections.append("deal_structure")
+        if sec_risk: sections.append("risk_mitigation")
+        
+        payload = {
+            "session_id": st.session_state["session_id"],
+            "financial_data_job_id": fin_job_id if fin_job_id else None,
+            "config": {
+                "memo_type": memo_type,
+                "firm_name": firm_name,
+                "sections": sections,
+                "confidence_threshold": confidence_thresh
+            }
+        }
+        
+        try:
+            resp = requests.post(f"{API_V2_URL}/generate", json=payload)
+            if not resp.ok:
+                st.error(f"Error: {resp.text}")
+                st.stop()
+                
+            job_id = resp.json()["job_id"]
+            st.info(f"Job started! ID: {job_id}")
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            while True:
+                status_resp = requests.get(f"{API_V2_URL}/status/{job_id}")
+                if status_resp.ok:
+                    status_data = status_resp.json()
+                    status = status_data["status"]
+                    status_text.text(f"Status: {status.capitalize()}")
+                    
+                    if status == "completed":
+                        progress_bar.progress(100)
+                        st.success("Deliverables generated successfully!")
+                        
+                        st.subheader("Review Dashboard")
+                        for sec in status_data.get("sections", []):
+                            with st.expander(f"{sec['title']} (Confidence: {sec['confidence']:.2f})"):
+                                if sec['needs_review']:
+                                    st.warning("Needs Review: Low confidence or missing data")
+                                st.markdown(sec['content'])
+                                
+                        urls = status_data.get("download_urls", {})
+                        if urls:
+                            col_dl1, col_dl2, col_dl3 = st.columns(3)
+                            host = "http://localhost:8000"
+                            if urls.get('docx'):
+                                col_dl1.markdown(f"**[Download DOCX]({host}{urls['docx']})**")
+                            if urls.get('pptx'):
+                                col_dl2.markdown(f"**[Download PPTX]({host}{urls['pptx']})**")
+                            if urls.get('audit_trail'):
+                                col_dl3.markdown(f"**[Download Audit Trail JSON]({host}{urls['audit_trail']})**")
+                        break
+                    elif status == "failed":
+                        progress_bar.progress(100)
+                        st.error("Job failed")
+                        break
+                    else:
+                        progress_bar.progress(50)
+                else:
+                    st.error("Failed to poll status")
+                    break
+                    
+                time.sleep(2)
+        except Exception as e:
+            st.error(f"Error: {e}")

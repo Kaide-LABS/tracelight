@@ -922,8 +922,395 @@ pandas>=2.2
 - CSV/JSON output only
 
 **Explicitly deferred to future phases**:
-- Workflow II (Post-Excel Narrative Deliverable Engine)
 - Workflow III (InfoSec/Vendor Risk Automation Pipeline)
 - Advanced generative models (TimeGAN, VAE)
 - Authentication / multi-tenancy
 - Persistent job storage (currently in-memory)
+
+---
+---
+
+## 10. Phase 2: Post-Excel Narrative Deliverable Engine
+
+> **Workflow II from CONTEXT.MD.** This phase adds a second microservice pipeline that ingests structured financial data (JSON/CSV from Phase 1 or exported Tracelight model outputs) plus qualitative source documents, and generates audit-ready Investment Committee memorandums (Word) and executive presentations (PowerPoint).
+
+### 10.1 The Problem
+
+After a financial model is built in Tracelight's Excel engine, analysts spend 48-72 hours manually:
+1. Extracting quantitative outputs from the spreadsheet
+2. Pasting data into charts
+3. Drafting 15-50 page IC memos in Word
+4. Building executive PowerPoint decks
+
+This is the **post-Excel bottleneck** — Tracelight perfected the center of the workflow, but the final mile remains entirely manual.
+
+### 10.2 IP Boundary (DMZ Rule — Phase 2 Addendum)
+
+| We DO | We DO NOT |
+|-------|-----------|
+| Ingest **exported** financial data (CSV/JSON) as a structured payload | Read from or write to `.xlsx` files |
+| Ingest qualitative source documents (PDF, DOCX, TXT) for context | Parse Excel formulas, cell references, or spreadsheet logic |
+| Generate `.docx` (Word) and `.pptx` (PowerPoint) deliverables | Modify or interact with Tracelight's in-Excel AI |
+| Use LLM for narrative drafting with citation enforcement | Use LLM to generate financial models or formulas |
+| Produce audit trails linking every claim to source data | Replicate any Tracelight core functionality |
+
+### 10.3 Architecture — Phase 2 Addition
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                    STREAMLIT FRONTEND (extended)              │
+│  ┌──────────────┐  ┌────────────────┐  ┌──────────────────┐ │
+│  │ Phase 1:     │  │ Phase 2:       │  │ Phase 2:         │ │
+│  │ Synth Data   │  │ Upload Sources │  │ Preview + Export  │ │
+│  │ Generator    │  │ + Config Memo  │  │ (DOCX/PPTX)      │ │
+│  └──────────────┘  └───────┬────────┘  └──────────────────┘ │
+└────────────────────────────┼─────────────────────────────────┘
+                             │ HTTP (port 8501 → 8000)
+┌────────────────────────────▼─────────────────────────────────┐
+│              FASTAPI BACKEND (port 8000 — extended)           │
+│                                                               │
+│  Phase 1 routes (unchanged):                                  │
+│    POST /api/v1/generate                                      │
+│    GET  /api/v1/download/{job_id}                             │
+│    GET  /api/v1/templates                                     │
+│                                                               │
+│  Phase 2 routes (new):                                        │
+│    POST /api/v2/memo/generate                                 │
+│    POST /api/v2/memo/upload-sources                           │
+│    GET  /api/v2/memo/download/{job_id}                        │
+│    GET  /api/v2/memo/status/{job_id}                          │
+│                                                               │
+│  ┌──────────── PHASE 2 PIPELINE ───────────────────────────┐ │
+│  │                                                         │ │
+│  │  ┌─────────────────┐                                    │ │
+│  │  │ 1. CONTEXT       │  PDF/DOCX/TXT ingestion           │ │
+│  │  │    HARVESTER     │  Semantic chunking + embedding     │ │
+│  │  │    AGENT         │  → ChromaDB vector store           │ │
+│  │  └────────┬─────────┘                                   │ │
+│  │           │ Indexed vector store                         │ │
+│  │           ▼                                             │ │
+│  │  ┌─────────────────┐                                    │ │
+│  │  │ 2. QUANTITATIVE  │  Ingest CSV/JSON financial data    │ │
+│  │  │    EXTRACTION    │  Deterministic metric extraction    │ │
+│  │  │    AGENT         │  Source-tagged JSON payload         │ │
+│  │  └────────┬─────────┘                                   │ │
+│  │           │ CitedMetrics (every number has a source tag) │ │
+│  │           ▼                                             │ │
+│  │  ┌─────────────────┐                                    │ │
+│  │  │ 3. NARRATIVE     │  LLM drafts memo section-by-sec   │ │
+│  │  │    DRAFTING      │  Citation-enforced RAG             │ │
+│  │  │    AGENT         │  Pyramid Principle structure       │ │
+│  │  └────────┬─────────┘                                   │ │
+│  │           │ SectionDraft[] with inline citations         │ │
+│  │           ▼                                             │ │
+│  │  ┌─────────────────┐                                    │ │
+│  │  │ 4. CITATION &    │  Verify every claim has source     │ │
+│  │  │    FORMATTING    │  Inject into DOCX/PPTX templates   │ │
+│  │  │    AGENT         │  Generate audit trail appendix     │ │
+│  │  └─────────────────┘                                   │ │
+│  └─────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 10.4 New Files to Create
+
+```
+backend/
+├── app/
+│   ├── schemas_v2.py                    # Phase 2 Pydantic models
+│   ├── pipeline_v2.py                   # Phase 2 orchestrator
+│   ├── agents/
+│   │   ├── context_harvester.py         # PDF/DOCX ingestion + vector store
+│   │   ├── quant_extractor.py           # Financial data extraction + source tagging
+│   │   ├── narrative_drafter.py         # Citation-enforced LLM narrative generation
+│   │   └── citation_formatter.py        # Audit trail + DOCX/PPTX rendering
+│   ├── prompts/
+│   │   ├── memo_section.j2             # Per-section drafting prompt
+│   │   └── executive_summary.j2        # Top-level summary prompt
+│   └── templates_v2/
+│       ├── ic_memo_template.docx       # Word template with Jinja2 placeholders
+│       └── exec_deck_template.pptx     # PowerPoint template
+```
+
+### 10.5 `backend/app/schemas_v2.py` — Phase 2 Pydantic Models
+
+```python
+from pydantic import BaseModel, Field
+from typing import Literal
+
+class SourceDocument(BaseModel):
+    """A qualitative source document uploaded by the user."""
+    filename: str
+    doc_type: Literal["cim", "management_presentation", "expert_call", "market_report", "other"]
+    description: str = ""
+
+class FinancialMetric(BaseModel):
+    """A single extracted metric with mandatory source attribution."""
+    name: str                               # e.g. "base_case_irr"
+    value: float | str
+    unit: str = ""                          # e.g. "%", "$M", "x"
+    scenario: Literal["base", "upside", "downside"] = "base"
+    source_tag: str                         # e.g. "model_export:row_42:irr" or "cim:page_12"
+
+class CitedMetrics(BaseModel):
+    """All extracted financial metrics, each source-tagged."""
+    company_name: str
+    deal_type: str                          # e.g. "LBO", "Growth Equity", "M&A"
+    currency: str = "USD"
+    metrics: list[FinancialMetric]
+
+class MemoSection(BaseModel):
+    """One section of the IC memo."""
+    section_id: str                         # e.g. "executive_summary", "investment_thesis"
+    title: str
+    content: str                            # Markdown with inline citations [source_tag]
+    citations: list[str]                    # List of source_tags referenced
+    confidence: float = Field(ge=0, le=1)   # LLM's confidence in the section
+    needs_review: bool = False              # Flagged if confidence < threshold
+
+class MemoConfig(BaseModel):
+    """User configuration for memo generation."""
+    memo_type: Literal["ic_memo", "exec_deck", "both"] = "both"
+    firm_name: str = ""
+    sections: list[str] = Field(default_factory=lambda: [
+        "executive_summary",
+        "investment_thesis",
+        "market_analysis",
+        "financial_projections",
+        "deal_structure",
+        "risk_mitigation",
+    ])
+    tone: Literal["formal", "concise", "technical"] = "formal"
+    max_pages: int = Field(default=30, ge=5, le=50)
+    confidence_threshold: float = Field(default=0.7, ge=0, le=1)
+
+class MemoGenerateRequest(BaseModel):
+    """Request body for POST /api/v2/memo/generate."""
+    session_id: str                         # From prior upload-sources call
+    financial_data_job_id: str | None = None # Optional: pull from Phase 1 output
+    financial_data_inline: CitedMetrics | None = None  # Or provide directly
+    config: MemoConfig = MemoConfig()
+
+class MemoGenerateResponse(BaseModel):
+    job_id: str
+    status: Literal["processing", "completed", "failed"]
+    sections: list[MemoSection] | None = None
+    download_urls: dict[str, str] = {}      # {"docx": "/api/v2/memo/download/xxx?fmt=docx", ...}
+    audit_trail_url: str | None = None
+    generated_at: str
+```
+
+### 10.6 Agent 1: Context Harvester Agent
+
+**Role**: Ingest qualitative source documents, chunk them semantically, embed them into a per-session vector store for RAG retrieval.
+
+**Implementation**:
+1. Accept uploaded files via `POST /api/v2/memo/upload-sources` (PDF, DOCX, TXT)
+2. Extract text:
+   - PDF → `pymupdf` (fitz) for text extraction + table detection
+   - DOCX → `python-docx` for paragraph extraction
+   - TXT → direct read
+3. Semantic chunking: split into ~500-token chunks with 50-token overlap, preserving paragraph boundaries
+4. Embed chunks using a lightweight local model (`sentence-transformers/all-MiniLM-L6-v2`) — no external API call needed
+5. Store in **ChromaDB** (ephemeral, per-session collection) with metadata: `{source_filename, page_number, chunk_index}`
+6. Return a `session_id` for downstream agents to query
+
+**Why ChromaDB**: Lightweight, runs in-process (no separate service), perfect for a demo. Ephemeral collections clean up automatically.
+
+**Why local embeddings**: Avoids external API latency/cost for document ingestion. MiniLM-L6-v2 is 80MB and runs in ~10ms per chunk on CPU.
+
+**Key references (sourced via Nia MCP)**:
+- `huseink/docx-dynamic-generation` — FastAPI + python-docx-template integration pattern
+- Citation-Enforced RAG for Fiscal Document Intelligence (arXiv:2603.14170) — source-first ingestion with span-level traceability
+
+### 10.7 Agent 2: Quantitative Extraction Agent
+
+**Role**: Deterministic. Zero LLM. Extract and source-tag every financial metric from the input data.
+
+**Implementation**:
+1. If `financial_data_job_id` is provided: load the CSV/JSON from Phase 1's output directory
+2. If `financial_data_inline` is provided: use directly
+3. For each metric in the data:
+   - Compute summary statistics (mean, median, P10/P90 across entities)
+   - Compute scenario-specific metrics (base/upside/downside if multiple seeds)
+   - Tag every number with a deterministic `source_tag`: `"model_export:{column}:{aggregation}"` (e.g., `"model_export:ebitda_margin:p50"`)
+4. Output: `CitedMetrics` object — every single number has a provenance tag
+
+**Critical rule**: This agent never generates numbers. It only extracts, aggregates, and tags. Every metric in the output must be traceable to a specific column and aggregation of the input data.
+
+### 10.8 Agent 3: Narrative Drafting Agent
+
+**Role**: LLM-powered, section-by-section IC memo drafting with **mandatory citation enforcement**.
+
+**Implementation (per section)**:
+1. Load section-specific Jinja2 template (`memo_section.j2`)
+2. Retrieve top-K relevant chunks from ChromaDB via semantic search on the section topic
+3. Inject retrieved chunks + `CitedMetrics` for the relevant section into the prompt
+4. LLM generates the section narrative with **inline citations**: every factual claim must reference a `[source_tag]`
+5. **Post-generation validation**: parse the output for citation tags, verify each tag exists in the `CitedMetrics` or ChromaDB metadata. If a claim has no citation, flag `needs_review = True`
+6. Assign `confidence` score: `(cited_claims / total_claims)`. If below `confidence_threshold`, route to human review.
+
+**Citation enforcement approach** (adapted from arXiv:2603.14170):
+- **Source-first**: the prompt includes only retrieved evidence — LLM is explicitly instructed: *"Do not include any claim that cannot be supported by the provided data. If insufficient evidence, write: [INSUFFICIENT DATA — REQUIRES ANALYST INPUT]"*
+- **Post-validation**: regex scan for `[source_tag]` patterns, cross-reference against known tags
+- **Abstention**: sections with <70% citation coverage are flagged, not silently included
+
+**Pyramid Principle**: Each section opens with the conclusion/recommendation, followed by supporting arguments grouped logically. This is enforced via the Jinja2 template structure.
+
+### 10.9 Agent 4: Citation & Formatting Agent
+
+**Role**: Render the validated narrative into professional `.docx` and `.pptx` files using templates, and generate an audit trail appendix.
+
+**Implementation**:
+1. **Word generation** (`python-docx-template` / `docxtpl`):
+   - Load `ic_memo_template.docx` — a pre-styled Word template with Jinja2 tags (`{{ executive_summary }}`, `{{ investment_thesis }}`, etc.)
+   - Inject section content, converting inline `[source_tag]` references to Word footnotes or endnotes
+   - Inject charts as images (pre-rendered by `plotly` → PNG)
+   - Generate audit trail appendix: table mapping every `[source_tag]` → source document, page, metric value
+
+2. **PowerPoint generation** (`python-pptx`):
+   - Load `exec_deck_template.pptx` — branded slide master
+   - Slide 1: Title + deal summary
+   - Slide 2: Investment thesis (3-4 bullets from exec summary)
+   - Slides 3-5: Key financial metrics as charts (plotly → PNG → inserted)
+   - Slide 6: Risk matrix
+   - Slide 7: Recommendation
+
+3. **Audit trail JSON**: machine-readable mapping of every generated claim to its source
+
+**Key references (sourced via Nia MCP)**:
+- `docxtpl` / `python-docx-template` — Jinja2-powered Word generation
+- `molodsom/docx-generator` — DOCX/PDF generation from templates via Jinja2
+- `python-pptx` — programmatic PowerPoint generation
+- `icip-cas/PPTAgent` — agentic framework for reflective slide generation
+
+### 10.10 `backend/app/prompts/memo_section.j2` — Section Drafting Template
+
+```jinja2
+You are a senior investment analyst at a top-tier private equity firm drafting an Investment Committee memorandum. You write in a formal, precise style following the McKinsey Pyramid Principle: lead with the conclusion, then provide supporting evidence.
+
+## Section: {{ section_title }}
+
+## Financial Data (Source-Tagged)
+{% for metric in relevant_metrics %}
+- {{ metric.name }}: {{ metric.value }}{{ metric.unit }} [{{ metric.source_tag }}] ({{ metric.scenario }} case)
+{% endfor %}
+
+## Qualitative Context (Retrieved from Source Documents)
+{% for chunk in retrieved_chunks %}
+---
+Source: {{ chunk.metadata.source_filename }}, Page {{ chunk.metadata.page_number }}
+Content: {{ chunk.text }}
+---
+{% endfor %}
+
+## Instructions
+1. Draft the "{{ section_title }}" section of the IC memo.
+2. **MANDATORY**: Every factual claim or number MUST include an inline citation in the format [source_tag]. Use the exact source_tags provided above.
+3. If you cannot support a claim from the provided data, write: [INSUFFICIENT DATA — REQUIRES ANALYST INPUT]
+4. Structure: Lead with the key takeaway for this section, then provide 2-4 supporting arguments.
+5. Use precise financial language. No hedging unless the data warrants it.
+6. Target length: {{ target_words }} words.
+
+Return the section as markdown text with inline [source_tag] citations.
+```
+
+### 10.11 `backend/app/prompts/executive_summary.j2`
+
+```jinja2
+You are drafting the Executive Summary for an Investment Committee memorandum. This is the most critical section — senior partners will read this first and may read nothing else.
+
+## Deal Overview
+- Company: {{ company_name }}
+- Deal Type: {{ deal_type }}
+- Firm: {{ firm_name }}
+
+## Key Metrics
+{% for metric in key_metrics %}
+- {{ metric.name }}: {{ metric.value }}{{ metric.unit }} [{{ metric.source_tag }}]
+{% endfor %}
+
+## Section Summaries
+{% for section in section_summaries %}
+### {{ section.title }}
+{{ section.summary }}
+{% endfor %}
+
+## Instructions
+1. Write a 300-500 word executive summary following the Pyramid Principle.
+2. Open with the investment recommendation (proceed / pass / conditional proceed).
+3. Cite the 3-5 most critical metrics with their [source_tag].
+4. Highlight the top 2 risks and mitigants.
+5. Every number must have a [source_tag] citation.
+```
+
+### 10.12 API Routes — Phase 2
+
+| Method | Path | Handler | Description |
+|--------|------|---------|-------------|
+| `POST` | `/api/v2/memo/upload-sources` | Accepts multipart file upload | Ingests PDFs/DOCX/TXT, chunks, embeds, returns `session_id` |
+| `POST` | `/api/v2/memo/generate` | Accepts `MemoGenerateRequest` | Kicks off async pipeline, returns `job_id` immediately |
+| `GET` | `/api/v2/memo/status/{job_id}` | Poll for completion | Returns current status + sections as they complete |
+| `GET` | `/api/v2/memo/download/{job_id}` | Query param `fmt=docx\|pptx\|json` | Downloads the generated deliverable |
+
+**Note**: Phase 2 pipeline runs **async via BackgroundTasks** (incorporating Gemini's feedback from Phase 1). The generate endpoint returns immediately with a `job_id`; the frontend polls `/status/`.
+
+### 10.13 Streamlit Frontend Extension
+
+**New tab**: "Deliverable Engine" (alongside existing "Synthetic Data Generator")
+
+**Flow**:
+1. **Upload Sources**: Multi-file uploader for CIM, management decks, expert call transcripts (PDF/DOCX/TXT). Shows upload progress + chunking status.
+2. **Financial Data**: Either "Pull from Phase 1 job" (dropdown of recent job IDs) or "Upload CSV/JSON directly"
+3. **Configure Memo**:
+   - Firm name input
+   - Memo type: IC Memo / Exec Deck / Both
+   - Section checkboxes (all checked by default)
+   - Tone selector
+   - Confidence threshold slider (default 0.7)
+4. **Generate**: Button → shows progress bar polling `/status/`
+5. **Review Dashboard**:
+   - Section-by-section preview (markdown rendered)
+   - Sections flagged `needs_review` highlighted in amber with "[INSUFFICIENT DATA]" markers visible
+   - Citation sidebar: click any `[source_tag]` to see the source chunk
+   - Audit trail table: expandable
+6. **Download**: Buttons for `.docx`, `.pptx`, and audit trail JSON
+
+### 10.14 New Dependencies — Phase 2
+
+**Backend additions to `requirements.txt`**:
+```
+docxtpl>=0.18                # Word generation from Jinja2 templates
+python-pptx>=1.0             # PowerPoint generation
+chromadb>=0.5                # In-process vector store
+sentence-transformers>=3.0   # Local embedding model (all-MiniLM-L6-v2)
+pymupdf>=1.24                # PDF text extraction
+plotly>=5.22                  # Chart rendering to PNG for doc insertion
+kaleido>=0.2                  # Plotly static image export
+```
+
+### 10.15 Docker Updates
+
+**`docker-compose.yml`** — no new services needed. ChromaDB runs in-process within the backend container. The only change is the backend Dockerfile needs to handle the larger image (sentence-transformers model download).
+
+**`backend/Dockerfile` addition**:
+```dockerfile
+# Pre-download the embedding model at build time to avoid runtime latency
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+```
+
+### 10.16 Acceptance Criteria — Phase 2
+
+- [ ] `POST /api/v2/memo/upload-sources` accepts PDF/DOCX/TXT, returns `session_id`
+- [ ] `POST /api/v2/memo/generate` returns `job_id` immediately (async)
+- [ ] `GET /api/v2/memo/status/{job_id}` shows progress, eventually `completed`
+- [ ] Generated IC memo has all 6 default sections
+- [ ] **Every factual claim in the memo has an inline `[source_tag]` citation**
+- [ ] Sections with confidence < 0.7 are flagged `needs_review: true`
+- [ ] Claims without sufficient evidence show `[INSUFFICIENT DATA — REQUIRES ANALYST INPUT]`
+- [ ] `GET /api/v2/memo/download/{job_id}?fmt=docx` returns a valid `.docx` file
+- [ ] `GET /api/v2/memo/download/{job_id}?fmt=pptx` returns a valid `.pptx` file with charts
+- [ ] Audit trail JSON maps every citation to source document + page/row
+- [ ] **No `.xlsx` files are created or read anywhere**
+- [ ] Streamlit "Deliverable Engine" tab works end-to-end
+- [ ] Pipeline can pull financial data from a Phase 1 `job_id` seamlessly

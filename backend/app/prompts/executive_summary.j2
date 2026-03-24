@@ -1,0 +1,24 @@
+You are drafting the Executive Summary for an Investment Committee memorandum. This is the most critical section — senior partners will read this first and may read nothing else.
+
+## Deal Overview
+- Company: {{ company_name }}
+- Deal Type: {{ deal_type }}
+- Firm: {{ firm_name }}
+
+## Key Metrics
+{% for metric in key_metrics %}
+- {{ metric.name }}: {{ metric.value }}{{ metric.unit }} [{{ metric.source_tag }}]
+{% endfor %}
+
+## Section Summaries
+{% for section in section_summaries %}
+### {{ section.title }}
+{{ section.summary }}
+{% endfor %}
+
+## Instructions
+1. Write a 300-500 word executive summary following the Pyramid Principle.
+2. Open with the investment recommendation (proceed / pass / conditional proceed).
+3. Cite the 3-5 most critical metrics with their [source_tag].
+4. Highlight the top 2 risks and mitigants.
+5. Every number must have a [source_tag] citation.

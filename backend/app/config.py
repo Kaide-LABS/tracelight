@@ -1,0 +1,13 @@
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    llm_provider: str = "google"                    # "google" or "openai"
+    llm_api_key: str = ""
+    llm_model: str = "gemini-2.5-pro"               # or "gpt-4o"
+    llm_base_url: str = "https://api.openai.com/v1" # only used for openai provider
+    default_dp_epsilon: float = 1.0
+    max_entities: int = 10000
+    output_dir: str = "/tmp/synth_output"
+
+    class Config:
+        env_file = ".env"

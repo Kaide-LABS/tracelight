@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
+    demo_mode: bool = False
     llm_provider: str = "google"                    # "google" or "openai"
     llm_api_key: str = ""
     llm_model: str = "gemini-3.1-pro-preview"       # or "gpt-5.2-chat-latest"

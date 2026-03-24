@@ -1,0 +1,42 @@
+{
+  "job_id": "demo_job_123",
+  "scenario": {
+    "natural_language": "Demo Scenario",
+    "use_llm_profiler": false
+  },
+  "privacy": {
+    "enabled": true,
+    "epsilon": 1.0
+  },
+  "output_format": "csv",
+  "profile_used": {
+    "name": "Demo Profile",
+    "variables": {
+      "Revenue": {
+        "type": "continuous"
+      },
+      "EBITDA": {
+        "type": "continuous"
+      }
+    }
+  },
+  "validation_report": {
+    "row_count": 1000,
+    "correlation_rmse": 0.05,
+    "dp_applied": true,
+    "dp_epsilon": 1.0,
+    "post_dp_ks_all_passed": true,
+    "ks_tests": {
+      "Revenue": {
+        "statistic": 0.02,
+        "p_value": 0.99,
+        "passed": true
+      },
+      "EBITDA": {
+        "statistic": 0.03,
+        "p_value": 0.95,
+        "passed": true
+      }
+    }
+  }
+}

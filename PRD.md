@@ -1683,3 +1683,373 @@ chroma_persist_dir: str = "/tmp/chroma_data"
 4. **DMZ Rule**: No `.xlsx` anywhere. CSV/DOCX/JSON only.
 
 5. **`__pycache__`**: Add `__pycache__/` and `*.pyc` to `.gitignore` before committing.
+
+---
+---
+
+## 12. Phase 4: Demo Polish & Pitch-Ready Packaging
+
+> This phase transforms the working MVP into a pitch-ready demo that can be screen-recorded or presented live to Tracelight's founding team. No new features — just branding, pre-loaded data, and a seamless flow that eliminates any chance of a live demo failure.
+
+### 12.1 Why This Phase Exists
+
+The three sidecar workflows are built. The math is rigorous. The code works. But a pitch to ex-McKinsey / ex-Jane Street / ex-Cambridge founders will be judged on **presentation quality** as much as technical substance. A default-styled Streamlit app with placeholder text and "Error: connection refused" during a live demo will undermine everything.
+
+Phase 4 ensures:
+- Zero-config startup (`docker-compose up` → everything works)
+- Zero live API calls needed (demo mode replays cached results)
+- Visual branding that mirrors Tracelight's own aesthetic
+- Pre-built sample outputs for every workflow
+
+### 12.2 Files to Create / Modify
+
+```
+frontend/
+├── .streamlit/
+│   └── config.toml                      # NEW: Tracelight-branded theme
+├── app.py                               # MODIFY: add landing page, demo mode toggle
+├── demo_data/                           # NEW: pre-cached demo data
+│   ├── phase1_sample_response.json      # Cached Phase 1 API response
+│   ├── phase1_sample_data.csv           # Pre-generated synthetic dataset
+│   ├── phase2_sample_response.json      # Cached Phase 2 API response
+│   ├── phase2_sample_memo.docx          # Pre-built IC memo
+│   ├── phase2_sample_deck.pptx          # Pre-built exec deck
+│   ├── phase3_sample_response.json      # Cached Phase 3 API response
+│   ├── phase3_sample_questionnaire.csv  # Sample SIG Lite input
+│   └── phase3_sample_completed.docx     # Pre-built completed questionnaire
+├── assets/                              # NEW: branding assets
+│   └── logo.png                         # Tracelight-style logo placeholder
+backend/
+├── app/
+│   ├── main.py                          # MODIFY: add GET /api/demo/seed endpoint
+│   └── demo_seed.py                     # NEW: script to generate all demo data
+```
+
+### 12.3 Streamlit Theme — Tracelight Branding
+
+CONTEXT.MD describes Tracelight's website as using a **dark, forest-green palette** evoking institutional gravitas. We mirror this exactly.
+
+**`frontend/.streamlit/config.toml`**:
+```toml
+[theme]
+primaryColor = "#2E7D32"
+backgroundColor = "#0A1F0D"
+secondaryBackgroundColor = "#12291A"
+textColor = "#E8F5E9"
+font = "sans-serif"
+
+[server]
+headless = true
+
+[browser]
+gatherUsageStats = false
+```
+
+**Color mapping**:
+| Element | Color | Rationale |
+|---------|-------|-----------|
+| Primary (buttons, links) | `#2E7D32` (forest green) | Matches Tracelight's brand green |
+| Background | `#0A1F0D` (near-black green) | Dark institutional aesthetic from their website |
+| Secondary BG (widgets, sidebar) | `#12291A` (dark green) | Subtle contrast without breaking the dark theme |
+| Text | `#E8F5E9` (soft white-green) | High readability on dark backgrounds |
+
+### 12.4 Landing Page
+
+Replace the current immediate tab layout with a **landing page** that sets context before diving into workflows.
+
+**Layout**:
+```
+┌─────────────────────────────────────────────────────────┐
+│  [Logo]  Tracelight Ecosystem — Agentic Sidecar Demos   │
+│                                                         │
+│  ┌─────────────┐ ┌─────────────┐ ┌──────────────────┐  │
+│  │ Workflow I   │ │ Workflow II  │ │ Workflow III      │  │
+│  │ Synthetic    │ │ Deliverable  │ │ Compliance        │  │
+│  │ Data Engine  │ │ Engine       │ │ Engine            │  │
+│  │              │ │              │ │                   │  │
+│  │ Collapse PoC │ │ Auto-generate│ │ Auto-complete     │  │
+│  │ timelines    │ │ IC memos &   │ │ SIG/CAIQ vendor   │  │
+│  │ from 6mo to  │ │ exec decks   │ │ questionnaires    │  │
+│  │ 6 minutes    │ │ from model   │ │ in minutes        │  │
+│  │              │ │ outputs      │ │                   │  │
+│  │ [Launch →]   │ │ [Launch →]   │ │ [Launch →]        │  │
+│  └─────────────┘ └─────────────┘ └──────────────────┘  │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │ 🔘 Demo Mode (pre-loaded data, no API keys)     │    │
+│  └─────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Implementation**:
+- Use `st.session_state["current_page"]` for navigation (landing → workflow tabs)
+- Each card is a `st.container()` with `st.button("Launch →")` that sets the page
+- Demo mode toggle stored in `st.session_state["demo_mode"]`
+
+### 12.5 Demo Mode
+
+**Concept**: When `demo_mode = True`, the frontend bypasses all API calls and loads pre-cached JSON responses + sample files from `frontend/demo_data/`. This guarantees:
+- No LLM API key needed
+- No backend container needed (though it can run)
+- Zero latency — instant results
+- Deterministic output — same results every recording take
+
+**Implementation per workflow**:
+
+**Phase 1 (Synthetic Data)**:
+- Skip `POST /api/v1/generate` → load `phase1_sample_response.json`
+- Skip `GET /api/v1/download/{job_id}` → load `phase1_sample_data.csv`
+- Charts render from the cached CSV
+
+**Phase 2 (Deliverable Engine)**:
+- Skip upload + generate → load `phase2_sample_response.json`
+- Show pre-rendered section previews with citations
+- Download buttons serve `phase2_sample_memo.docx` and `phase2_sample_deck.pptx` directly
+
+**Phase 3 (Compliance Engine)**:
+- Skip upload + generate → load `phase3_sample_response.json`
+- Show pre-populated review dashboard with a mix of auto-approved and needs-review items
+- Download buttons serve `phase3_sample_completed.docx`
+
+**Code pattern** (repeat for each workflow):
+```python
+if st.session_state.get("demo_mode"):
+    import json
+    with open("demo_data/phase1_sample_response.json") as f:
+        result = json.load(f)
+    df = pd.read_csv("demo_data/phase1_sample_data.csv")
+else:
+    resp = requests.post(f"{API_URL}/generate", json=payload)
+    result = resp.json()
+    # ... fetch CSV from API
+```
+
+### 12.6 `backend/app/demo_seed.py` — Demo Data Generator
+
+A standalone script that runs all three pipelines once and saves the outputs as demo fixtures.
+
+```python
+"""
+Run once to generate all demo data fixtures.
+Usage: python -m app.demo_seed
+
+Requires:
+- Backend running (or direct imports)
+- LLM API key in .env (one-time generation)
+
+Outputs to: frontend/demo_data/
+"""
+
+import json
+import asyncio
+from app.config import Settings
+from app.schemas import GenerateRequest, ScenarioInput, PrivacyConfig, StatisticalProfile
+from app.pipeline import run_pipeline
+# ... similar for Phase 2 and Phase 3
+
+DEMO_OUTPUT_DIR = "../frontend/demo_data"
+
+async def seed_phase1():
+    """Generate a PE LBO synthetic dataset with the default preset."""
+    settings = Settings()
+    request = GenerateRequest(
+        scenario=ScenarioInput(
+            natural_language="Mid-market PE LBO — European industrials, moderate leverage, stable margins",
+            use_llm_profiler=True
+        ),
+        privacy=PrivacyConfig(enabled=True, epsilon=1.0),
+        output_format="csv",
+        seed=42
+    )
+    response = await run_pipeline(request, settings)
+
+    # Save API response as JSON fixture
+    with open(f"{DEMO_OUTPUT_DIR}/phase1_sample_response.json", "w") as f:
+        json.dump(response.model_dump(), f, indent=2)
+
+    # Copy the generated CSV
+    import shutil
+    shutil.copy(
+        f"{settings.output_dir}/{response.job_id}.csv",
+        f"{DEMO_OUTPUT_DIR}/phase1_sample_data.csv"
+    )
+
+async def seed_phase2():
+    """Generate a sample IC memo + exec deck."""
+    # ... similar: run memo pipeline with inline CitedMetrics, save outputs
+
+async def seed_phase3():
+    """Generate sample compliance responses from a SIG Lite fixture."""
+    # ... similar: run compliance pipeline with sample questionnaire, save outputs
+
+if __name__ == "__main__":
+    asyncio.run(seed_phase1())
+    asyncio.run(seed_phase2())
+    asyncio.run(seed_phase3())
+    print("Demo data seeded successfully.")
+```
+
+### 12.7 Frontend UX Polish
+
+Beyond the landing page and demo mode, apply these refinements across all tabs:
+
+**Global**:
+- Replace `st.title("Tracelight...")` with logo image + styled header via `st.markdown()` with custom CSS
+- Add `st.sidebar` with: demo mode toggle, current workflow indicator, link to "About" expander
+- Consistent status badges: green for success/auto-approved, amber for needs-review, red for failed
+- Replace bare `st.error()` / `st.warning()` with styled callout containers
+
+**Phase 1 tab**:
+- Add "Scenario Preview" card after LLM profiler returns — show the generated profile as a formatted table before generation
+- Add target vs. actual correlation heatmap **side by side** (currently only shows actual)
+- Format KS test results with pass/fail color coding
+
+**Phase 2 tab**:
+- Add progress indicator showing which section is being drafted ("Drafting: Investment Thesis... 3/6")
+- Color-code section confidence: green (>0.8), amber (0.5-0.8), red (<0.5)
+- Show citation count per section
+
+**Phase 3 tab**:
+- Add domain-level progress bars (e.g., "Access Control: 12/15 approved")
+- Filter buttons: "Show all" / "Needs review only" / "Auto-approved only"
+- Bulk approve button for all items above confidence threshold
+
+### 12.8 Custom CSS Injection
+
+Streamlit allows custom CSS via `st.markdown()`. Add a shared style block at the top of `app.py`:
+
+```python
+st.markdown("""
+<style>
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+
+    /* Custom metric cards */
+    [data-testid="stMetricValue"] {
+        font-size: 2rem;
+        font-weight: 700;
+    }
+
+    /* Confidence badge colors */
+    .confidence-high { color: #4CAF50; font-weight: bold; }
+    .confidence-med { color: #FF9800; font-weight: bold; }
+    .confidence-low { color: #F44336; font-weight: bold; }
+
+    /* Landing page cards */
+    .workflow-card {
+        background: #12291A;
+        border: 1px solid #2E7D32;
+        border-radius: 12px;
+        padding: 24px;
+        text-align: center;
+        transition: border-color 0.2s;
+    }
+    .workflow-card:hover {
+        border-color: #4CAF50;
+    }
+</style>
+""", unsafe_allow_html=True)
+```
+
+### 12.9 Docker — Zero-Config Startup
+
+Ensure `docker-compose up --build` works with **no `.env` file** when in demo mode.
+
+**Changes to `backend/app/config.py`**:
+```python
+class Settings(BaseSettings):
+    # ... existing fields ...
+    demo_mode: bool = False  # NEW: skip LLM calls, serve pre-cached data
+```
+
+**Changes to `docker-compose.yml`**:
+```yaml
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - synth_output:/tmp/synth_output
+      - chroma_data:/tmp/chroma_data
+    environment:
+      - DEMO_MODE=true   # Default to demo mode for pitch
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend/demo_data:/app/demo_data:ro  # Mount demo fixtures
+```
+
+**Changes to `.env.example`**:
+```
+# Demo mode — set to true to skip LLM calls and use pre-cached data
+DEMO_MODE=true
+
+# Only needed when DEMO_MODE=false:
+LLM_PROVIDER=google
+LLM_API_KEY=your-gemini-api-key-here
+LLM_MODEL=gemini-3.1-pro-preview
+```
+
+### 12.10 Pre-Built Sample Outputs
+
+The demo seed script (12.6) generates these, but they should also be **committed to the repo** so `docker-compose up` works immediately without running the seed.
+
+| File | Content | Used in |
+|------|---------|---------|
+| `phase1_sample_response.json` | Full `GenerateResponse` with validation report | Phase 1 demo |
+| `phase1_sample_data.csv` | 50 entities × 20 quarters × 5 variables = 1000 rows | Phase 1 charts |
+| `phase2_sample_response.json` | Full `MemoGenerateResponse` with 6 sections, citations, confidence | Phase 2 review dashboard |
+| `phase2_sample_memo.docx` | Formatted IC memo with audit trail | Phase 2 download |
+| `phase2_sample_deck.pptx` | 7-slide exec deck | Phase 2 download |
+| `phase3_sample_response.json` | 20-question SIG Lite with mix of auto-approved + needs-review | Phase 3 review dashboard |
+| `phase3_sample_questionnaire.csv` | Input SIG Lite questionnaire (20 questions, 5 domains) | Phase 3 upload demo |
+| `phase3_sample_completed.docx` | Completed questionnaire grouped by domain | Phase 3 download |
+
+### 12.11 Acceptance Criteria — Phase 4
+
+- [ ] `docker-compose up --build` with no `.env` file starts in demo mode — no errors
+- [ ] Landing page renders with 3 workflow cards and demo mode toggle
+- [ ] **Demo mode**: all 3 workflows render instantly from cached data with zero API calls
+- [ ] **Demo mode**: charts, tables, download buttons all work from cached data
+- [ ] Theme matches Tracelight's dark green aesthetic (no default Streamlit purple)
+- [ ] Streamlit branding (hamburger menu, "Made with Streamlit" footer) is hidden
+- [ ] Phase 1 demo shows: data preview, distributions, correlation heatmap (target vs actual), KS results
+- [ ] Phase 2 demo shows: 6 memo sections with confidence scores, citations, DOCX/PPTX downloads
+- [ ] Phase 3 demo shows: summary metrics, review dashboard with approve/override, CSV/DOCX downloads
+- [ ] Pre-built sample outputs are committed and valid (DOCX opens in Word, PPTX opens in PowerPoint)
+- [ ] Switching demo mode off and providing real API keys → live mode works identically
+- [ ] **No `.xlsx` files anywhere**
+- [ ] Screen recording of full demo flow takes < 5 minutes
+
+### 12.12 Gemini Implementation Notes
+
+> Same critical rules as Phase 3 (section 11.16), plus:
+
+6. **Demo data generation**: Run the seed script (`python -m app.demo_seed`) once with a real API key to generate fixtures, then commit the fixtures to `frontend/demo_data/`. The fixtures must be valid JSON that matches the exact Pydantic response schemas.
+
+7. **CSS and Streamlit config**: The `.streamlit/config.toml` must be inside the `frontend/` directory (where `app.py` lives) and must be included in the frontend Dockerfile `COPY` step. Streamlit reads it relative to the working directory.
+
+8. **Frontend Dockerfile update**:
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY .streamlit/ ./.streamlit/
+COPY demo_data/ ./demo_data/
+COPY assets/ ./assets/
+COPY app.py .
+CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+```
+
+9. **Landing page navigation**: Use `st.session_state["current_page"]` with values `"landing"`, `"phase1"`, `"phase2"`, `"phase3"`. Render tabs only when navigated away from landing. Include a "Back to Home" button in the sidebar on every workflow page.

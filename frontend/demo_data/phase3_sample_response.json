@@ -1,0 +1,34 @@
+{
+  "job_id": "demo_comp_job_789",
+  "status": "completed",
+  "total_questions": 20,
+  "auto_approved": 15,
+  "needs_review": 5,
+  "responses": [
+    {
+      "question_id": "Q1",
+      "question_text": "Do you encrypt data at rest?",
+      "domain": "Data Security",
+      "response_type": "boolean",
+      "status": "auto_approved",
+      "confidence": 0.95,
+      "boolean_value": true,
+      "response_text": "Yes, we use AES-256 encryption."
+    },
+    {
+      "question_id": "Q2",
+      "question_text": "Describe your incident response plan.",
+      "domain": "Incident Management",
+      "response_type": "text",
+      "status": "needs_review",
+      "confidence": 0.65,
+      "boolean_value": null,
+      "response_text": "We have a 24/7 SOC."
+    }
+  ],
+  "download_urls": {
+    "csv": "/demo_data/phase3_sample_questionnaire.csv",
+    "docx": "/demo_data/phase3_sample_completed.docx",
+    "json": "/demo_data/phase3_sample_completed.json"
+  }
+}

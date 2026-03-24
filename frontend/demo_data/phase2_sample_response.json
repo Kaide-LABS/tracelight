@@ -1,0 +1,47 @@
+{
+  "job_id": "demo_memo_job_456",
+  "status": "completed",
+  "sections": [
+    {
+      "title": "Executive Summary",
+      "content": "This is a demo executive summary.",
+      "confidence": 0.95,
+      "needs_review": false
+    },
+    {
+      "title": "Investment Thesis",
+      "content": "This is a demo investment thesis.",
+      "confidence": 0.85,
+      "needs_review": false
+    },
+    {
+      "title": "Market Analysis",
+      "content": "This is a demo market analysis.",
+      "confidence": 0.45,
+      "needs_review": true
+    },
+    {
+      "title": "Financial Projections",
+      "content": "This is a demo financial projection.",
+      "confidence": 0.92,
+      "needs_review": false
+    },
+    {
+      "title": "Deal Structure",
+      "content": "This is a demo deal structure.",
+      "confidence": 0.88,
+      "needs_review": false
+    },
+    {
+      "title": "Risk Mitigation",
+      "content": "This is a demo risk mitigation.",
+      "confidence": 0.75,
+      "needs_review": false
+    }
+  ],
+  "download_urls": {
+    "docx": "/demo_data/phase2_sample_memo.docx",
+    "pptx": "/demo_data/phase2_sample_deck.pptx",
+    "audit_trail": "/demo_data/audit_trail.json"
+  }
+}

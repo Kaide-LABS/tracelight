@@ -9,6 +9,11 @@ Thumbs.db
 *.swo
 *~
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
 # Environment
 .env
 .env.local

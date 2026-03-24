@@ -7,6 +7,8 @@ services:
     volumes:
       - synth_output:/tmp/synth_output
       - chroma_data:/tmp/chroma_data
+    environment:
+      - DEMO_MODE=true
 
   frontend:
     build: ./frontend
@@ -14,6 +16,8 @@ services:
       - "8501:8501"
     depends_on:
       - backend
+    volumes:
+      - ./frontend/demo_data:/app/demo_data:ro
 
 volumes:
   synth_output:

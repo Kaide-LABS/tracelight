@@ -84,3 +84,40 @@
 ### Verdict: Approve with fixes for #1 (wrong model) and #3 (citation validation). The rest are minor.
 
 ---
+
+## 2026-03-24 - Phase 3 Implementation Review (Claude reviewing Gemini's code)
+
+### Review Summary: STRONG implementation. Gemini learned from Phase 2 feedback.
+
+### What Gemini Got Right:
+1. **LLM pattern fixed**: `response_drafter.py` uses `settings.llm_model` and `settings.llm_api_key` via the dual-provider `_call_llm()` pattern. No hardcoded model IDs. This was the critical Phase 2 mistake — now fixed.
+2. **Settings injection**: All agents accept `Settings` as constructor param. No `os.getenv()` calls.
+3. **Schemas**: `schemas_v3.py` is a 1:1 match with the PRD spec.
+4. **Pipeline**: `pipeline_v3.py` is well-structured — async via BackgroundTasks, `asyncio.to_thread` for sync LLM calls, in-memory job tracking with tally updates, export regeneration after reviews.
+5. **Intake parser**: Solid zero-LLM implementation — CSV, JSON, DOCX, PDF support with framework auto-detection (SIG Core/Lite, CAIQ, custom) via regex/heuristics. Response type inference from question phrasing.
+6. **KB retriever**: Persistent ChromaDB collection (`tracelight_kb`), reuses the Phase 2 chunking pattern, similarity score conversion from L2 distance.
+7. **Routing exporter**: CSV/DOCX/JSON export, domain-grouped DOCX output, confidence badges.
+8. **Main.py**: Clean Phase 3 route additions. Explicitly rejects `.xlsx` uploads with DMZ error message. PATCH endpoint for human review with export regeneration.
+9. **Docker-compose**: `chroma_data` volume added for persistent KB storage.
+10. **Jinja2 prompt**: Matches PRD spec verbatim.
+11. **Confidence scoring**: `citation_score × max_similarity` — meaningful composite metric.
+
+### Issues Found:
+
+**1. Frontend missing Phase 3 tab (MODERATE)**
+- `frontend/app.py` still only has 2 tabs (Phase 1 + Phase 2). No "Compliance Engine" tab.
+- Needs: third tab with KB upload, questionnaire upload, configure, generate, review dashboard, export.
+
+**2. `__pycache__` still in repo + not in `.gitignore` (HYGIENE)**
+- `.gitignore` doesn't have `__pycache__/` or `*.pyc`
+- Multiple `__pycache__/` directories committed
+
+**3. `backend_and_frontend_setup/` stray directory persists (HYGIENE)**
+- Still contains old Dockerfile, requirements.txt, and the formerly-leaked .env.example
+
+**4. `routing_exporter.py` uses `.dict()` instead of `.model_dump()` (MINOR)**
+- Pydantic v2 deprecates `.dict()` in favor of `.model_dump()`
+
+### Verdict: Approve. The critical LLM pattern issue from Phase 2 is fixed. Main gap is the missing frontend tab — needs to be added.
+
+---

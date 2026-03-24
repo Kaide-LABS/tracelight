@@ -42,7 +42,7 @@ class RoutingExporterAgent:
 
     def export_json(self, job_id: str, responses: List[DraftResponse]) -> str:
         filepath = os.path.join(self.output_dir, f"{job_id}_questionnaire.json")
-        data = [r.dict() for r in responses]
+        data = [r.model_dump() for r in responses]
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)
         return filepath

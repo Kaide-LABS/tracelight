@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     default_dp_epsilon: float = 1.0
     max_entities: int = 10000
     output_dir: str = "/tmp/synth_output"
+    chroma_persist_dir: str = "/tmp/chroma_data"
 
     class Config:
         env_file = ".env"

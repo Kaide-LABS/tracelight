@@ -7,11 +7,12 @@ import time
 
 API_URL = "http://backend:8000/api/v1"
 API_V2_URL = "http://backend:8000/api/v2/memo"
+API_V3_URL = "http://backend:8000/api/v3/compliance"
 
 st.set_page_config(page_title="Tracelight", layout="wide")
 st.title("Tracelight Synthetic Data & Deliverable Engine")
 
-tab1, tab2 = st.tabs(["Synthetic Data Generator", "Deliverable Engine"])
+tab1, tab2, tab3 = st.tabs(["Synthetic Data Generator", "Deliverable Engine", "Compliance Engine"])
 
 with tab1:
     st.header("Phase 1: Synthetic Data Generator")
@@ -258,3 +259,134 @@ with tab2:
                 time.sleep(2)
         except Exception as e:
             st.error(f"Error: {e}")
+
+with tab3:
+    st.header("Phase 3: InfoSec & Vendor Risk Automation Pipeline")
+
+    col_upload_1, col_upload_2 = st.columns(2)
+    with col_upload_1:
+        st.subheader("1. Upload Knowledge Base")
+        st.write("Upload SOC 2 reports, pentest summaries, security policies.")
+        kb_files = st.file_uploader("Upload KB Docs", accept_multiple_files=True, key="kb_up")
+        if st.button("Index to KB", key="kb_idx"):
+            if not kb_files:
+                st.warning("Please upload at least one file.")
+            else:
+                with st.spinner("Indexing to persistent ChromaDB..."):
+                    files = [("files", (f.name, f.getvalue(), f.type)) for f in kb_files]
+                    resp = requests.post(f"{API_V3_URL}/upload-kb", files=files)
+                    if resp.ok:
+                        st.success(resp.json().get("message", "Success"))
+                    else:
+                        st.error(f"Error: {resp.status_code}")
+
+    with col_upload_2:
+        st.subheader("2. Upload Questionnaire")
+        st.write("Upload inbound vendor questionnaire (CSV, DOCX, PDF, JSON). No XLSX.")
+        q_file = st.file_uploader("Upload Questionnaire", accept_multiple_files=False, key="q_up")
+        if st.button("Parse Questionnaire", key="q_parse"):
+            if not q_file:
+                st.warning("Please upload a file.")
+            elif q_file.name.endswith(".xlsx"):
+                st.error("XLSX files are strictly forbidden (DMZ rule).")
+            else:
+                with st.spinner("Parsing format and framework..."):
+                    files = {"file": (q_file.name, q_file.getvalue(), q_file.type)}
+                    resp = requests.post(f"{API_V3_URL}/upload-questionnaire", files=files)
+                    if resp.ok:
+                        data = resp.json()
+                        st.session_state["q_session_id"] = data["questionnaire_session_id"]
+                        st.success(f"Parsed {data['total_questions']} questions (Framework: {data['framework']})")
+                        if data['domains']:
+                            st.write(f"Detected Domains: {', '.join(data['domains'][:5])}...")
+                    else:
+                        st.error(f"Error: {resp.text}")
+
+    st.subheader("3. Configure & Generate")
+    c_col1, c_col2, c_col3, c_col4 = st.columns(4)
+    with c_col1:
+        comp_name = st.text_input("Company Name", "Tracelight")
+    with c_col2:
+        tone = st.selectbox("Tone", ["formal", "concise", "technical"], index=0)
+    with c_col3:
+        conf_thresh = st.slider("Review Threshold", 0.0, 1.0, 0.8)
+    with c_col4:
+        auto_thresh = st.slider("Auto-Approve Threshold", 0.0, 1.0, 0.9)
+
+    if st.button("Generate Responses", type="primary", key="gen3"):
+        if "q_session_id" not in st.session_state:
+            st.warning("Please upload and parse a questionnaire first.")
+        else:
+            payload = {
+                "kb_session_id": "persistent",
+                "questionnaire_session_id": st.session_state["q_session_id"],
+                "config": {
+                    "company_name": comp_name,
+                    "default_tone": tone,
+                    "confidence_threshold": conf_thresh,
+                    "auto_approve_above": auto_thresh
+                }
+            }
+            try:
+                resp = requests.post(f"{API_V3_URL}/generate", json=payload)
+                if not resp.ok:
+                    st.error(f"Error: {resp.text}")
+                else:
+                    job_id = resp.json()["job_id"]
+                    st.session_state["comp_job_id"] = job_id
+                    st.info(f"Compliance job started! ID: {job_id}")
+            except Exception as e:
+                st.error(f"Exception: {e}")
+
+    if "comp_job_id" in st.session_state:
+        job_id = st.session_state["comp_job_id"]
+        status_resp = requests.get(f"{API_V3_URL}/status/{job_id}")
+        
+        if status_resp.ok:
+            data = status_resp.json()
+            st.write(f"**Status:** {data['status'].capitalize()}")
+            
+            if data['status'] == 'completed':
+                st.subheader("4. Review Dashboard")
+                m_col1, m_col2, m_col3 = st.columns(3)
+                m_col1.metric("Total Questions", data['total_questions'])
+                m_col2.metric("Auto-Approved", data['auto_approved'], delta_color="normal")
+                m_col3.metric("Needs Review", data['needs_review'], delta_color="inverse")
+                
+                responses = data.get("responses", [])
+                if responses:
+                    for r in responses:
+                        with st.expander(f"[{r['status']}] {r['question_id']} (Conf: {r['confidence']}) - {r['question_text'][:60]}..."):
+                            st.write(f"**Question:** {r['question_text']}")
+                            st.write(f"**Domain:** {r['domain']} | **Type:** {r['response_type']}")
+                            
+                            new_text = st.text_area("Drafted Response", r['response_text'], key=f"text_{r['question_id']}")
+                            new_bool = r['boolean_value']
+                            if r['response_type'] == "boolean":
+                                new_bool = st.radio("Boolean Answer", [True, False, None], index=[True, False, None].index(r['boolean_value']), key=f"bool_{r['question_id']}")
+                                
+                            notes = st.text_input("Reviewer Notes", r.get('reviewer_notes', ''), key=f"notes_{r['question_id']}")
+                            
+                            c1, c2 = st.columns(2)
+                            if c1.button("Approve", key=f"app_{r['question_id']}"):
+                                patch_data = {"status": "auto_approved", "response_text": new_text, "boolean_value": new_bool, "reviewer_notes": notes}
+                                requests.patch(f"{API_V3_URL}/review/{job_id}/{r['question_id']}", json=patch_data)
+                                st.rerun()
+                                
+                            if c2.button("Override", key=f"over_{r['question_id']}"):
+                                patch_data = {"status": "human_overridden", "response_text": new_text, "boolean_value": new_bool, "reviewer_notes": notes}
+                                requests.patch(f"{API_V3_URL}/review/{job_id}/{r['question_id']}", json=patch_data)
+                                st.rerun()
+                                
+                st.subheader("5. Export")
+                urls = data.get("download_urls", {})
+                host = "http://localhost:8000"
+                if urls:
+                    dl_c1, dl_c2, dl_c3 = st.columns(3)
+                    if urls.get("csv"):
+                        dl_c1.markdown(f"**[Download CSV]({host}{urls['csv']})**")
+                    if urls.get("docx"):
+                        dl_c2.markdown(f"**[Download DOCX]({host}{urls['docx']})**")
+                    if urls.get("json"):
+                        dl_c3.markdown(f"**[Download JSON]({host}{urls['json']})**")
+

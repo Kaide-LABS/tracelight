@@ -27,7 +27,7 @@ async def run_memo_pipeline(job_id: str, request: MemoGenerateRequest, settings)
         if not metrics:
             raise ValueError("No financial metrics provided")
 
-        drafter = NarrativeDrafter(chroma_client)
+        drafter = NarrativeDrafter(chroma_client, settings)
         
         sections = []
         for sec_id in request.config.sections:

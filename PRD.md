@@ -922,7 +922,6 @@ pandas>=2.2
 - CSV/JSON output only
 
 **Explicitly deferred to future phases**:
-- Workflow III (InfoSec/Vendor Risk Automation Pipeline)
 - Advanced generative models (TimeGAN, VAE)
 - Authentication / multi-tenancy
 - Persistent job storage (currently in-memory)
@@ -1314,3 +1313,373 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 - [ ] **No `.xlsx` files are created or read anywhere**
 - [ ] Streamlit "Deliverable Engine" tab works end-to-end
 - [ ] Pipeline can pull financial data from a Phase 1 `job_id` seamlessly
+
+---
+---
+
+## 11. Phase 3: InfoSec & Vendor Risk Automation Pipeline
+
+> **Workflow III from CONTEXT.MD.** This phase adds a compliance automation pipeline that ingests inbound security questionnaires (SIG Core/Lite, CAIQ, bespoke), matches questions against Tracelight's internal security knowledge base, and auto-generates responses with confidence scoring and human-in-the-loop routing for low-confidence answers.
+
+### 11.1 The Problem
+
+As a seed-stage startup selling to PE funds, banks, and asset managers, Tracelight faces exhaustive third-party vendor risk assessments:
+- **SIG Core**: 800+ questions across 21 risk domains
+- **SIG Lite**: ~126 questions for lower-risk engagements
+- **CAIQ**: 260+ cloud security control questions
+- **Bespoke**: Every bank has its own custom questionnaire
+
+The CTO and engineering team — former Jane Street engineers — are currently hand-completing these. Hundreds of hours drained from product development to copy-paste answers into procurement spreadsheets.
+
+### 11.2 IP Boundary (DMZ Rule — Phase 3 Addendum)
+
+| We DO | We DO NOT |
+|-------|-----------|
+| Parse inbound questionnaires (CSV, DOCX, PDF, JSON) | Read or write `.xlsx` questionnaire files |
+| Match questions against an indexed security knowledge base | Access Tracelight's production infrastructure or codebase |
+| Generate draft responses with confidence scores | Make claims about security controls not in the knowledge base |
+| Route low-confidence answers to human reviewers | Auto-submit responses without human approval |
+| Export completed questionnaires as CSV/DOCX/JSON | Touch any financial modeling or in-Excel functionality |
+
+### 11.3 Architecture — Phase 3 Addition
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                 STREAMLIT FRONTEND (extended)                  │
+│  ┌────────────┐  ┌────────────────┐  ┌─────────────────────┐ │
+│  │ Phase 1:   │  │ Phase 2:       │  │ Phase 3:            │ │
+│  │ Synth Data │  │ Deliverables   │  │ Compliance Engine   │ │
+│  └────────────┘  └────────────────┘  └──────────┬──────────┘ │
+└─────────────────────────────────────────────────┼────────────┘
+                                                  │ HTTP
+┌─────────────────────────────────────────────────▼────────────┐
+│               FASTAPI BACKEND (port 8000 — extended)          │
+│                                                               │
+│  Phase 3 routes (new):                                        │
+│    POST /api/v3/compliance/upload-kb                           │
+│    POST /api/v3/compliance/upload-questionnaire                │
+│    POST /api/v3/compliance/generate                            │
+│    GET  /api/v3/compliance/status/{job_id}                     │
+│    PATCH /api/v3/compliance/review/{job_id}/{question_id}      │
+│    GET  /api/v3/compliance/download/{job_id}                   │
+│                                                               │
+│  ┌──────────── PHASE 3 PIPELINE ───────────────────────────┐ │
+│  │                                                         │ │
+│  │  ┌─────────────────┐                                    │ │
+│  │  │ 1. INTAKE &      │  Parse questionnaire format        │ │
+│  │  │    PARSING       │  Normalize to QuestionItem[]        │ │
+│  │  │    AGENT         │  Detect framework (SIG/CAIQ/custom) │ │
+│  │  └────────┬─────────┘                                   │ │
+│  │           │ QuestionItem[] (normalized)                   │ │
+│  │           ▼                                             │ │
+│  │  ┌─────────────────┐                                    │ │
+│  │  │ 2. KNOWLEDGE     │  Semantic search against KB         │ │
+│  │  │    RETRIEVAL     │  Retrieve top-K policy matches      │ │
+│  │  │    AGENT         │  Per question                       │ │
+│  │  └────────┬─────────┘                                   │ │
+│  │           │ QuestionItem + RetrievedEvidence[]            │ │
+│  │           ▼                                             │ │
+│  │  ┌─────────────────┐                                    │ │
+│  │  │ 3. RESPONSE      │  LLM drafts answer per question    │ │
+│  │  │    DRAFTING      │  Citation-enforced (reuses Phase 2  │ │
+│  │  │    AGENT         │  pattern). Confidence scored.       │ │
+│  │  └────────┬─────────┘                                   │ │
+│  │           │ DraftResponse[] with confidence scores        │ │
+│  │           ▼                                             │ │
+│  │  ┌─────────────────┐                                    │ │
+│  │  │ 4. ROUTING &     │  High confidence → auto-approved    │ │
+│  │  │    EXPORT        │  Low confidence → flagged for human │ │
+│  │  │    AGENT         │  Export to CSV/DOCX/JSON             │ │
+│  │  └─────────────────┘                                   │ │
+│  └─────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 11.4 New Files to Create
+
+```
+backend/
+├── app/
+│   ├── schemas_v3.py                    # Phase 3 Pydantic models
+│   ├── pipeline_v3.py                   # Phase 3 orchestrator
+│   ├── agents/
+│   │   ├── intake_parser.py             # Questionnaire format detection + normalization
+│   │   ├── kb_retriever.py              # Knowledge base indexing + semantic retrieval
+│   │   ├── response_drafter.py          # LLM response generation with citation enforcement
+│   │   └── routing_exporter.py          # Confidence routing + export to CSV/DOCX/JSON
+│   ├── prompts/
+│   │   └── compliance_response.j2       # Per-question response prompt
+```
+
+### 11.5 `backend/app/schemas_v3.py` — Phase 3 Pydantic Models
+
+```python
+from pydantic import BaseModel, Field
+from typing import Literal
+
+class QuestionItem(BaseModel):
+    """A single normalized question from any questionnaire format."""
+    question_id: str                        # e.g., "SIG_A.1.1" or "CAIQ_AIS-01" or "Q42"
+    domain: str = ""                        # e.g., "Access Control", "Encryption", "Business Resiliency"
+    question_text: str
+    response_type: Literal["boolean", "narrative", "multiple_choice", "evidence_upload"] = "narrative"
+    options: list[str] = []                 # For multiple_choice
+    framework: str = ""                     # "sig_core", "sig_lite", "caiq", "custom"
+
+class KBDocument(BaseModel):
+    """A security policy or evidence document in the knowledge base."""
+    filename: str
+    doc_type: Literal["soc2_report", "pentest_summary", "incident_response_plan",
+                       "security_policy", "prior_questionnaire", "architecture_doc", "other"]
+    description: str = ""
+
+class RetrievedEvidence(BaseModel):
+    """A chunk retrieved from the KB matching a specific question."""
+    text: str
+    source_filename: str
+    page_number: int = 0
+    similarity_score: float
+
+class DraftResponse(BaseModel):
+    """A generated response for a single question."""
+    question_id: str
+    question_text: str
+    domain: str
+    response_text: str
+    response_type: Literal["boolean", "narrative", "multiple_choice"] = "narrative"
+    boolean_value: bool | None = None       # For boolean questions
+    citations: list[str]                    # Source tags
+    confidence: float = Field(ge=0, le=1)
+    status: Literal["auto_approved", "needs_review", "human_overridden"] = "needs_review"
+    reviewer_notes: str = ""
+
+class ComplianceConfig(BaseModel):
+    """User configuration for questionnaire processing."""
+    confidence_threshold: float = Field(default=0.8, ge=0, le=1)
+    auto_approve_above: float = Field(default=0.9, ge=0, le=1)
+    company_name: str = "Tracelight"
+    default_tone: Literal["formal", "concise", "technical"] = "formal"
+
+class ComplianceGenerateRequest(BaseModel):
+    """Request body for POST /api/v3/compliance/generate."""
+    kb_session_id: str                      # From prior upload-kb call
+    questionnaire_session_id: str           # From prior upload-questionnaire call
+    config: ComplianceConfig = ComplianceConfig()
+
+class ComplianceGenerateResponse(BaseModel):
+    job_id: str
+    status: Literal["processing", "completed", "failed"]
+    total_questions: int = 0
+    auto_approved: int = 0
+    needs_review: int = 0
+    responses: list[DraftResponse] | None = None
+    download_urls: dict[str, str] = {}
+    generated_at: str
+
+class ReviewUpdate(BaseModel):
+    """PATCH body for human review of a single question."""
+    response_text: str | None = None        # Override the generated response
+    boolean_value: bool | None = None
+    status: Literal["auto_approved", "human_overridden"] = "human_overridden"
+    reviewer_notes: str = ""
+```
+
+### 11.6 Agent 1: Intake & Parsing Agent
+
+**Role**: Detect questionnaire format, parse questions into normalized `QuestionItem[]`.
+
+**Implementation**:
+1. Accept uploaded questionnaire via `POST /api/v3/compliance/upload-questionnaire` (CSV, DOCX, PDF, JSON)
+2. **Format detection**:
+   - CSV: look for column headers matching known patterns (`Question`, `Control ID`, `Response`, `Domain`)
+   - DOCX/PDF: extract text, use regex to detect SIG domain headers (e.g., `"A. Enterprise Risk Management"`, `"B. Security Policy"`) or CAIQ control IDs (`AIS-01`, `BCR-01`)
+   - JSON: parse directly if structured
+3. **Framework identification**: classify as `sig_core`, `sig_lite`, `caiq`, or `custom` based on control ID patterns and question count
+4. **Normalization**: map every question to a `QuestionItem` with:
+   - Deterministic `question_id` from the source (e.g., SIG control ID, row number)
+   - `response_type` inferred from question phrasing ("Do you..." → boolean, "Describe..." → narrative)
+   - `domain` extracted from section headers
+
+**Key design**: This agent is **zero LLM** — pure regex/heuristic parsing. Questionnaire formats are rigid and well-structured; LLM parsing would be overkill and non-deterministic.
+
+### 11.7 Agent 2: Knowledge Retrieval Agent
+
+**Role**: Index Tracelight's security documentation into a persistent ChromaDB collection, then retrieve top-K relevant chunks per question.
+
+**Implementation**:
+1. `POST /api/v3/compliance/upload-kb` accepts security docs (SOC 2 reports, pentest summaries, prior completed questionnaires, security policies, architecture docs)
+2. Reuses the **same chunking + embedding pipeline from Phase 2's Context Harvester** (`sentence-transformers/all-MiniLM-L6-v2` + ChromaDB)
+3. KB collection is persisted across sessions (unlike Phase 2's ephemeral per-session collections) — the KB is Tracelight's "trust center" and should accumulate over time
+4. For each `QuestionItem`, embed the `question_text` and retrieve top-5 chunks with similarity scores
+5. If the top chunk's similarity score < 0.3, flag the question as "no KB coverage"
+
+**Reuse from Phase 2**: `ContextHarvester._chunk_text()` and the embedding pipeline are identical. Factor into a shared utility or instantiate `ContextHarvester` with a persistent collection name.
+
+### 11.8 Agent 3: Response Drafting Agent
+
+**Role**: LLM-powered, per-question response generation with citation enforcement.
+
+**Implementation (per question)**:
+1. Load `compliance_response.j2` Jinja2 template
+2. Inject: `question_text`, `response_type`, `retrieved_evidence[]`, `company_name`, `tone`
+3. LLM generates the response:
+   - **Boolean**: "Yes" or "No" + brief justification with `[source_tag]`
+   - **Narrative**: 50-200 word response citing specific policies/controls
+   - **Multiple choice**: selected option + justification
+4. **Citation enforcement** (reuses Phase 2 pattern): every claim must reference a `[source_tag]`. Unsubstantiated claims → `[REQUIRES REVIEW]`
+5. **Confidence scoring**: `(verified_citations / total_claims)` × `max(similarity_scores)`. Accounts for both citation quality and retrieval relevance.
+6. **Provider pattern**: Uses `settings.llm_provider` and `settings.llm_model` — **same dual-provider `_call_llm()` pattern from the fixed `narrative_drafter.py`**. Never hardcode model IDs.
+
+### 11.9 Agent 4: Routing & Export Agent
+
+**Role**: Route responses by confidence, allow human review, export final questionnaire.
+
+**Implementation**:
+1. **Auto-routing**:
+   - `confidence >= auto_approve_above` (default 0.9) → `status: "auto_approved"`
+   - `confidence < confidence_threshold` (default 0.8) → `status: "needs_review"`
+   - Between threshold and auto-approve → `status: "needs_review"` (conservative)
+2. **Human review** via `PATCH /api/v3/compliance/review/{job_id}/{question_id}`:
+   - Reviewer can override `response_text`, `boolean_value`, add `reviewer_notes`
+   - Status flips to `"human_overridden"`
+3. **Export** via `GET /api/v3/compliance/download/{job_id}?fmt=csv|docx|json`:
+   - **CSV**: columns = `question_id, domain, question_text, response, confidence, status, citations`
+   - **DOCX**: formatted questionnaire response document grouped by domain, with confidence badges
+   - **JSON**: full `DraftResponse[]` array
+   - **Never `.xlsx`**
+
+### 11.10 `backend/app/prompts/compliance_response.j2`
+
+```jinja2
+You are the Head of Information Security at {{ company_name }}, responding to a third-party vendor risk assessment questionnaire. Your responses must be accurate, {{ tone }}, and grounded exclusively in the provided security documentation.
+
+## Question
+ID: {{ question_id }}
+Domain: {{ domain }}
+Question: {{ question_text }}
+Response Type: {{ response_type }}
+{% if options %}
+Options: {{ options | join(", ") }}
+{% endif %}
+
+## Evidence from Security Knowledge Base
+{% for evidence in retrieved_evidence %}
+---
+Source: {{ evidence.source_filename }}, Page {{ evidence.page_number }}
+Relevance: {{ "%.0f" | format(evidence.similarity_score * 100) }}%
+Content: {{ evidence.text }}
+---
+{% endfor %}
+
+## Instructions
+{% if response_type == "boolean" %}
+1. Answer "Yes" or "No" based strictly on the evidence above.
+2. Follow with a 1-2 sentence justification citing [source_filename:page_X].
+3. If the evidence does not clearly support either answer, respond: "Yes" with caveat and add [REQUIRES REVIEW].
+{% elif response_type == "narrative" %}
+1. Write a 50-200 word response addressing the question directly.
+2. Cite specific policies, controls, or evidence using [source_filename:page_X] tags.
+3. If evidence is insufficient, write what you can support and append: [REQUIRES REVIEW — INSUFFICIENT KB COVERAGE]
+{% elif response_type == "multiple_choice" %}
+1. Select the most appropriate option from: {{ options | join(", ") }}
+2. Provide a 1-sentence justification with [source_filename:page_X] citation.
+{% endif %}
+4. Never fabricate controls or policies not present in the evidence.
+5. Use precise security terminology appropriate for enterprise procurement.
+```
+
+### 11.11 API Routes — Phase 3
+
+| Method | Path | Handler | Description |
+|--------|------|---------|-------------|
+| `POST` | `/api/v3/compliance/upload-kb` | Multipart file upload | Index security docs into persistent KB collection |
+| `POST` | `/api/v3/compliance/upload-questionnaire` | Multipart file upload | Parse + normalize questionnaire, return `questionnaire_session_id` |
+| `POST` | `/api/v3/compliance/generate` | `ComplianceGenerateRequest` | Kick off async response generation |
+| `GET` | `/api/v3/compliance/status/{job_id}` | Poll for completion | Returns progress + responses as they complete |
+| `PATCH` | `/api/v3/compliance/review/{job_id}/{question_id}` | `ReviewUpdate` body | Human override for a single question |
+| `GET` | `/api/v3/compliance/download/{job_id}` | Query param `fmt=csv\|docx\|json` | Export completed questionnaire |
+
+### 11.12 Streamlit Frontend Extension
+
+**New tab**: "Compliance Engine" (third tab)
+
+**Flow**:
+1. **Upload Knowledge Base**: Multi-file uploader for SOC 2 reports, pentest summaries, security policies, prior questionnaire responses. Shows indexing progress. Persists across sessions.
+2. **Upload Questionnaire**: Single file uploader (CSV/DOCX/PDF). Shows detected framework, question count, domain breakdown.
+3. **Configure**:
+   - Company name (default "Tracelight")
+   - Confidence threshold slider (default 0.8)
+   - Auto-approve threshold slider (default 0.9)
+   - Tone selector
+4. **Generate**: Button → progress bar polling `/status/`
+5. **Review Dashboard**:
+   - Summary cards: total questions, auto-approved (green), needs review (amber), no KB coverage (red)
+   - Filterable table: all questions with response preview, confidence bar, status badge
+   - Click any "needs review" row → expandable editor:
+     - Shows retrieved evidence chunks
+     - Editable response text area
+     - "Approve" / "Override" buttons → calls PATCH endpoint
+   - Domain-level progress bar (e.g., "Access Control: 12/15 approved")
+6. **Export**: Buttons for CSV, DOCX, JSON. Only enabled when all questions are approved or overridden.
+
+### 11.13 New Dependencies — Phase 3
+
+No new dependencies beyond Phase 2. Reuses:
+- `chromadb` (persistent collection for KB)
+- `sentence-transformers` (same embedding model)
+- `pymupdf` + `python-docx` (document parsing)
+- `docxtpl` (DOCX export)
+- LLM via existing `Settings` dual-provider pattern
+
+### 11.14 Docker Updates
+
+None. Phase 3 runs entirely within the existing backend container. The only change is ChromaDB needs a persistent volume for the KB collection:
+
+**`docker-compose.yml` addition**:
+```yaml
+services:
+  backend:
+    volumes:
+      - synth_output:/tmp/synth_output
+      - chroma_data:/tmp/chroma_data    # NEW: persistent KB storage
+volumes:
+  synth_output:
+  chroma_data:                           # NEW
+```
+
+And `config.py` needs:
+```python
+chroma_persist_dir: str = "/tmp/chroma_data"
+```
+
+### 11.15 Acceptance Criteria — Phase 3
+
+- [ ] `POST /api/v3/compliance/upload-kb` accepts PDF/DOCX/TXT security docs, indexes into persistent KB
+- [ ] `POST /api/v3/compliance/upload-questionnaire` parses CSV/DOCX/PDF, returns normalized question count + detected framework
+- [ ] `POST /api/v3/compliance/generate` returns `job_id` immediately (async)
+- [ ] Responses are generated for all parsed questions
+- [ ] **Every response cites `[source_filename:page_X]` from the KB**
+- [ ] Questions with confidence >= 0.9 are auto-approved
+- [ ] Questions with confidence < 0.8 are flagged `needs_review`
+- [ ] `PATCH /api/v3/compliance/review/{job_id}/{question_id}` allows human override
+- [ ] `GET /api/v3/compliance/download/{job_id}?fmt=csv` exports valid CSV with all responses
+- [ ] `GET /api/v3/compliance/download/{job_id}?fmt=docx` exports formatted DOCX grouped by domain
+- [ ] **No `.xlsx` files are created or read anywhere**
+- [ ] Streamlit "Compliance Engine" tab works end-to-end
+- [ ] KB persists across Docker restarts (volume-mounted)
+- [ ] Intake parser correctly detects SIG Core/Lite, CAIQ, and custom formats
+- [ ] Export only enabled when all questions are approved/overridden
+
+### 11.16 Gemini Implementation Notes
+
+> **CRITICAL — Read before implementing. These are recurring mistakes from Phase 1 and Phase 2.**
+
+1. **LLM Model IDs**: The correct models are `gemini-3.1-pro-preview` (Google) and `gpt-5.2-chat-latest` (OpenAI). Do NOT use `gemini-2.5-pro`, `gemini-2.5-flash`, `gpt-4o`, or any other model ID. Always read the model from `settings.llm_model` — never hardcode.
+
+2. **Dual-provider pattern**: Every agent that calls an LLM must support both Google (via `google-genai` SDK) and OpenAI (via `httpx`). Use the `_call_llm()` pattern from `backend/app/agents/narrative_drafter.py` as the reference implementation. Read `settings.llm_provider` to determine which path.
+
+3. **Settings injection**: Always accept `Settings` as a constructor parameter. Never read env vars directly with `os.getenv()`. The `Settings` class from `config.py` handles all env resolution.
+
+4. **DMZ Rule**: No `.xlsx` anywhere. CSV/DOCX/JSON only.
+
+5. **`__pycache__`**: Add `__pycache__/` and `*.pyc` to `.gitignore` before committing.

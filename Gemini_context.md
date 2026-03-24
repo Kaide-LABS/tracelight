@@ -36,3 +36,51 @@
 **Summary**: Gemini caught two genuine mathematical errors (AR(1) ordering, DP mechanism) and two valid engineering improvements (vectorization, structured outputs). All four should be incorporated into the PRD before implementation.
 
 ---
+
+## 2026-03-24 - Phase 2 Implementation Review (Claude reviewing Gemini's code)
+
+### Review Summary: SOLID implementation with issues to fix
+
+### What Gemini Got Right:
+1. **Architecture**: Clean separation of all 4 agents (context_harvester, quant_extractor, narrative_drafter, citation_formatter) — matches the spec exactly
+2. **Async pipeline**: `BackgroundTasks` used correctly for `/api/v2/memo/generate`, frontend polls `/status/` — addressed Phase 1 feedback
+3. **ChromaDB integration**: Ephemeral client, per-session collections, local MiniLM-L6-v2 embeddings — no external dependencies
+4. **Schemas**: `schemas_v2.py` is a 1:1 match with the PRD spec
+5. **Jinja2 prompts**: Both `memo_section.j2` and `executive_summary.j2` match the spec verbatim
+6. **Frontend**: Tab-based layout, full Phase 2 flow with upload → configure → generate → poll → review dashboard → download. Clean.
+7. **Dependencies**: All Phase 2 deps added to requirements.txt correctly
+8. **Main.py**: Phase 1 routes untouched, Phase 2 routes cleanly appended with the correct paths
+
+### Issues Found:
+
+**1. Wrong LLM model ID (CRITICAL)**
+- `narrative_drafter.py` line 59: hardcodes `model='gemini-2.5-flash'`
+- Should be `settings.llm_model` (i.e., `gemini-3.1-pro-preview`)
+- Also reads `GEMINI_API_KEY` env var directly instead of using `settings.llm_api_key`
+- No fallback to OpenAI provider — the dual-provider pattern from the profiler agent is missing
+
+**2. No structured output / JSON response mode on LLM call (MINOR)**
+- `narrative_drafter.py` calls `generate_content()` without `response_mime_type` or temperature config
+- Should match the profiler pattern: `config={"temperature": 0.2}`
+
+**3. Citation validation is weak (MODERATE)**
+- `narrative_drafter.py` lines 69-73: confidence calculation uses `":" in c` as a proxy for valid citation — this catches any bracketed text containing a colon, not just actual source_tags
+- Should cross-reference against the actual `valid_tags` set only
+
+**4. Quant extractor hardcodes deal metadata (MINOR)**
+- `quant_extractor.py` returns `company_name="Synthetic Target"` and `deal_type="LBO"` hardcoded
+- Should accept these from the request or infer from Phase 1 profile's `asset_class`
+
+**5. Template generation at startup (MINOR)**
+- `main.py` startup event auto-generates `.docx` and `.pptx` templates if missing — pragmatic for the demo but the generated templates are minimal (no styling/branding)
+- Fine for MVP, but should be replaced with proper branded templates before the pitch
+
+**6. `__pycache__` committed to repo (HYGIENE)**
+- Multiple `__pycache__/` directories with `.pyc` files in the repo. Should be in `.gitignore`
+
+**7. `backend_and_frontend_setup/` stray directory still exists (HYGIENE)**
+- Contains duplicate Dockerfile and requirements.txt plus the old .env.example with leaked keys
+
+### Verdict: Approve with fixes for #1 (wrong model) and #3 (citation validation). The rest are minor.
+
+---

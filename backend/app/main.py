@@ -150,6 +150,108 @@ async def download_memo(job_id: str, fmt: str, settings: Settings = Depends(get_
     
     raise HTTPException(status_code=404, detail="File not found")
 
+# ======================= PHASE 3 ROUTES =======================
+
+from app.schemas_v3 import ComplianceGenerateRequest, ComplianceGenerateResponse, ReviewUpdate
+from app.pipeline_v3 import start_compliance_job, get_job_status, update_job_response, regenerate_exports, get_chroma_client as get_chroma_client_v3, questionnaires_db
+from app.agents.kb_retriever import KBRetrieverAgent
+from app.agents.intake_parser import IntakeParserAgent
+import json
+import shutil
+
+@app.post("/api/v3/compliance/upload-kb")
+async def upload_kb(files: list[UploadFile] = File(...), settings: Settings = Depends(get_settings)):
+    client = get_chroma_client_v3(settings)
+    retriever = KBRetrieverAgent(client)
+    
+    temp_dir = f"/tmp/kb_upload_{uuid.uuid4().hex[:8]}"
+    os.makedirs(temp_dir, exist_ok=True)
+    
+    try:
+        for file in files:
+            filepath = os.path.join(temp_dir, file.filename)
+            with open(filepath, "wb") as f:
+                f.write(await file.read())
+            # For simplicity, pass doc_type="other" and empty description, or extract from name if possible
+            retriever.process_file(filepath, doc_type="other", description="Uploaded KB doc")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        
+    return {"status": "success", "message": f"Indexed {len(files)} files into KB"}
+
+@app.post("/api/v3/compliance/upload-questionnaire")
+async def upload_questionnaire(file: UploadFile = File(...)):
+    if file.filename.endswith('.xlsx'):
+        raise HTTPException(status_code=400, detail="XLSX files are strictly forbidden (DMZ rule).")
+        
+    parser = IntakeParserAgent()
+    content = await file.read()
+    
+    try:
+        questions = parser.parse_questionnaire(file.filename, content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    session_id = uuid.uuid4().hex[:8]
+    questionnaires_db[session_id] = questions
+    
+    framework = questions[0].framework if questions else "unknown"
+    domains = list(set([q.domain for q in questions if q.domain]))
+    
+    return {
+        "questionnaire_session_id": session_id,
+        "framework": framework,
+        "total_questions": len(questions),
+        "domains": domains
+    }
+
+@app.post("/api/v3/compliance/generate", response_model=ComplianceGenerateResponse)
+async def generate_compliance(request: ComplianceGenerateRequest, background_tasks: BackgroundTasks, settings: Settings = Depends(get_settings)):
+    if request.questionnaire_session_id not in questionnaires_db:
+        raise HTTPException(status_code=404, detail="Questionnaire session not found")
+        
+    job_id = start_compliance_job(request, background_tasks, settings)
+    return get_job_status(job_id)
+
+@app.get("/api/v3/compliance/status/{job_id}", response_model=ComplianceGenerateResponse)
+async def get_compliance_status(job_id: str):
+    try:
+        return get_job_status(job_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+@app.patch("/api/v3/compliance/review/{job_id}/{question_id}")
+async def review_compliance_response(job_id: str, question_id: str, update: ReviewUpdate, settings: Settings = Depends(get_settings)):
+    try:
+        success = update_job_response(job_id, question_id, update.dict(exclude_unset=True))
+        if not success:
+            raise HTTPException(status_code=404, detail="Question not found in job")
+        
+        # Regenerate exports after review update
+        regenerate_exports(job_id, settings)
+        return {"status": "success"}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+@app.get("/api/v3/compliance/download/{job_id}")
+async def download_compliance(job_id: str, fmt: str, settings: Settings = Depends(get_settings)):
+    if fmt == "csv":
+        path = f"{settings.output_dir}/{job_id}_questionnaire.csv"
+        media = "text/csv"
+    elif fmt == "docx":
+        path = f"{settings.output_dir}/{job_id}_questionnaire.docx"
+        media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    elif fmt == "json":
+        path = f"{settings.output_dir}/{job_id}_questionnaire.json"
+        media = "application/json"
+    else:
+        raise HTTPException(status_code=400, detail="Invalid format")
+        
+    if os.path.exists(path):
+        return FileResponse(path, media_type=media, filename=f"{job_id}_questionnaire.{fmt}")
+    
+    raise HTTPException(status_code=404, detail="File not found")
+
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}

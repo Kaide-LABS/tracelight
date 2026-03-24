@@ -6,6 +6,7 @@ services:
     env_file: .env
     volumes:
       - synth_output:/tmp/synth_output
+      - chroma_data:/tmp/chroma_data
 
   frontend:
     build: ./frontend
@@ -16,3 +17,4 @@ services:
 
 volumes:
   synth_output:
+  chroma_data:

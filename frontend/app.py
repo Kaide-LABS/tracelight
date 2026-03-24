@@ -32,21 +32,21 @@ st.markdown("""
     .confidence-med { color: #FF9800; font-weight: bold; }
     .confidence-low { color: #F44336; font-weight: bold; }
 
-    /* Landing page cards - Light theme */
+    /* Landing page cards - Dark theme */
     .workflow-card {
-        background: #ffffff;
-        border: 1px solid #004d2e;
+        background: #12291A;
+        border: 1px solid #2E7D32;
         border-radius: 12px;
         padding: 24px;
         text-align: center;
         transition: border-color 0.2s;
-        color: #000000;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        color: #E8F5E9;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         margin-bottom: 20px;
     }
     .workflow-card:hover {
-        border-color: #008f51;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        border-color: #4CAF50;
+        box-shadow: 0 4px 12px rgba(46,125,50,0.3);
     }
 </style>
 """, unsafe_allow_html=True)

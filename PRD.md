@@ -2053,3 +2053,697 @@ CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0
 ```
 
 9. **Landing page navigation**: Use `st.session_state["current_page"]` with values `"landing"`, `"phase1"`, `"phase2"`, `"phase3"`. Render tabs only when navigated away from landing. Include a "Back to Home" button in the sidebar on every workflow page.
+
+---
+---
+
+## 13. Phase 5: Production Hardening
+
+> This phase adds the minimum infrastructure needed so that when the pitch lands and Tracelight says "can we try this with real data next week?", you're ready. No over-engineering — just auth, persistence, logging, error handling, rate limiting, and tests.
+
+### 13.1 Why This Phase Exists
+
+The demo works. But if Tracelight's CTO runs a pentest against the API (and a former Jane Street engineer will), he'll find:
+- No authentication — anyone can hit the endpoints
+- In-memory job storage — restart the container, lose everything
+- No logging — if something breaks in the follow-up, no audit trail
+- No tests — the math engine is the most critical component and has zero test coverage
+- No rate limiting — a curious intern with `curl` in a loop takes down the service
+
+Phase 5 fixes all of this with minimal scope creep.
+
+### 13.2 Files to Create / Modify
+
+```
+backend/
+├── app/
+│   ├── auth.py                      # NEW: API key auth middleware
+│   ├── database.py                  # NEW: SQLite job persistence
+│   ├── logging_config.py            # NEW: Structured JSON logging
+│   ├── middleware.py                 # NEW: Rate limiting + request logging
+│   ├── main.py                      # MODIFY: wire auth, logging, rate limiting, error handlers
+│   ├── config.py                    # MODIFY: add auth + logging settings
+│   ├── pipeline.py                  # MODIFY: persist jobs to SQLite
+│   ├── pipeline_v2.py               # MODIFY: persist jobs to SQLite
+│   ├── pipeline_v3.py               # MODIFY: persist jobs to SQLite
+├── tests/                           # NEW: test suite
+│   ├── __init__.py
+│   ├── conftest.py                  # Shared fixtures (test client, settings)
+│   ├── test_generator.py            # Unit tests: Cholesky, copula, distributions
+│   ├── test_validator.py            # Unit tests: KS-tests, DP mechanism
+│   ├── test_api_v1.py               # Integration tests: Phase 1 endpoints
+│   ├── test_api_v2.py               # Integration tests: Phase 2 endpoints
+│   └── test_api_v3.py               # Integration tests: Phase 3 endpoints
+├── requirements.txt                 # MODIFY: add new deps
+```
+
+### 13.3 `backend/app/auth.py` — API Key Authentication
+
+Simple Bearer token auth via FastAPI's `Security` dependency. No OAuth, no JWT — just a shared secret that can be rotated.
+
+```python
+from fastapi import Security, HTTPException, status
+from fastapi.security import APIKeyHeader
+from app.config import Settings
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def verify_api_key(
+    api_key: str = Security(api_key_header),
+    settings: Settings = None,
+) -> str:
+    """
+    Verify the API key from the X-API-Key header.
+    In demo mode, authentication is bypassed.
+    """
+    if settings and settings.demo_mode:
+        return "demo"
+    if not api_key or api_key != settings.api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+    return api_key
+```
+
+**How it integrates**:
+- All `/api/v1/`, `/api/v2/`, `/api/v3/` routes get `Depends(verify_api_key)`
+- `/health` and `/docs` remain unauthenticated
+- Demo mode bypasses auth entirely (so `docker-compose up` still works with no config)
+- Frontend passes the key via `X-API-Key` header on all requests
+
+**Config additions**:
+```python
+class Settings(BaseSettings):
+    # ... existing fields ...
+    api_key: str = ""                  # Set via API_KEY env var
+    auth_enabled: bool = True          # Disable in dev if needed
+```
+
+### 13.4 `backend/app/database.py` — SQLite Job Persistence
+
+Replace all in-memory dicts (`JOB_STATUS`, `JOB_RESULTS`, `jobs_db`) with SQLite via `aiosqlite`.
+
+```python
+import aiosqlite
+import json
+import os
+from typing import Optional
+
+DB_PATH = "/tmp/synth_output/jobs.db"
+
+async def init_db():
+    """Create jobs table if not exists. Called on startup."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS jobs (
+                job_id TEXT PRIMARY KEY,
+                phase TEXT NOT NULL,           -- 'v1', 'v2', 'v3'
+                status TEXT NOT NULL DEFAULT 'pending',
+                request_json TEXT,             -- serialized request
+                result_json TEXT,              -- serialized response
+                error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        await db.commit()
+
+async def create_job(job_id: str, phase: str, request_data: dict) -> None:
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO jobs (job_id, phase, status, request_json, created_at, updated_at) VALUES (?, ?, 'pending', ?, ?, ?)",
+            (job_id, phase, json.dumps(request_data), now, now)
+        )
+        await db.commit()
+
+async def update_job(job_id: str, status: str, result_data: dict = None, error: str = None) -> None:
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE jobs SET status = ?, result_json = ?, error = ?, updated_at = ? WHERE job_id = ?",
+            (status, json.dumps(result_data) if result_data else None, error, now, job_id)
+        )
+        await db.commit()
+
+async def get_job(job_id: str) -> Optional[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,))
+        row = await cursor.fetchone()
+        if row:
+            return {
+                "job_id": row["job_id"],
+                "phase": row["phase"],
+                "status": row["status"],
+                "request": json.loads(row["request_json"]) if row["request_json"] else None,
+                "result": json.loads(row["result_json"]) if row["result_json"] else None,
+                "error": row["error"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+        return None
+```
+
+**Migration path**: Each pipeline (`pipeline.py`, `pipeline_v2.py`, `pipeline_v3.py`) calls `create_job()` at start and `update_job()` on completion/failure. The in-memory dicts remain as a fast cache but are backed by SQLite. On container restart, jobs are recoverable from the DB.
+
+**DB file location**: `/tmp/synth_output/jobs.db` — same volume mount as generated files, so it persists across container restarts.
+
+### 13.5 `backend/app/logging_config.py` — Structured Logging
+
+```python
+import structlog
+import logging
+import sys
+
+def setup_logging(log_level: str = "INFO"):
+    """Configure structlog for JSON output."""
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.JSONRenderer(),
+        ],
+        wrapper_class=structlog.make_filtering_bound_logger(
+            getattr(logging, log_level.upper(), logging.INFO)
+        ),
+        context_class=dict,
+        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
+        cache_logger_on_first_use=True,
+    )
+
+def get_logger(name: str = None):
+    return structlog.get_logger(name or "tracelight")
+```
+
+**Usage in pipelines**:
+```python
+from app.logging_config import get_logger
+log = get_logger("pipeline_v1")
+
+async def run_pipeline(request, settings):
+    log.info("pipeline_started", job_id=job_id, phase="v1", use_llm=request.scenario.use_llm_profiler)
+    # ... pipeline steps ...
+    log.info("profiler_completed", job_id=job_id, duration_ms=elapsed)
+    log.info("generator_completed", job_id=job_id, rows=len(df), duration_ms=elapsed)
+    log.info("pipeline_completed", job_id=job_id, status="completed", total_duration_ms=total)
+```
+
+Every log entry includes `job_id` for traceability. JSON format is parseable by any log aggregator.
+
+### 13.6 `backend/app/middleware.py` — Rate Limiting + Request Logging
+
+```python
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from starlette.requests import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+import time
+from app.logging_config import get_logger
+
+log = get_logger("middleware")
+
+limiter = Limiter(key_func=get_remote_address)
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start = time.perf_counter()
+        response = await call_next(request)
+        duration = (time.perf_counter() - start) * 1000
+        log.info(
+            "request",
+            method=request.method,
+            path=request.url.path,
+            status=response.status_code,
+            duration_ms=round(duration, 1),
+            client=request.client.host if request.client else "unknown",
+        )
+        return response
+```
+
+**Rate limits**:
+| Endpoint pattern | Limit | Rationale |
+|-----------------|-------|-----------|
+| `POST /api/v1/generate` | 10/minute | Heavy compute (generation) |
+| `POST /api/v2/memo/generate` | 5/minute | LLM calls per section |
+| `POST /api/v3/compliance/generate` | 5/minute | LLM calls per question |
+| `POST /api/*/upload*` | 20/minute | File uploads |
+| `GET /api/*` | 60/minute | Read-only, light |
+
+**Integration in `main.py`**:
+```python
+from app.middleware import limiter, RequestLoggingMiddleware
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(RequestLoggingMiddleware)
+
+@app.post("/api/v1/generate")
+@limiter.limit("10/minute")
+async def generate_data(request: Request, ...):
+    ...
+```
+
+### 13.7 Global Error Handling
+
+Add to `main.py`:
+
+```python
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from app.logging_config import get_logger
+
+log = get_logger("error_handler")
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    log.error(
+        "unhandled_exception",
+        path=request.url.path,
+        method=request.method,
+        error=str(exc),
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "error_id": str(uuid.uuid4())},
+    )
+```
+
+**LLM retry logic** — add to the `_call_llm()` pattern in all agents:
+```python
+import tenacity
+
+@tenacity.retry(
+    stop=tenacity.stop_after_attempt(2),
+    wait=tenacity.wait_exponential(min=1, max=5),
+    retry=tenacity.retry_if_exception_type((httpx.TimeoutException, httpx.ConnectError)),
+    before_sleep=lambda retry_state: log.warning("llm_retry", attempt=retry_state.attempt_number),
+)
+def _call_llm(self, prompt: str) -> str:
+    ...
+```
+
+### 13.8 Enhanced Health Check
+
+```python
+@app.get("/health")
+async def health_check(settings: Settings = Depends(get_settings)):
+    checks = {"status": "ok", "checks": {}}
+
+    # SQLite
+    try:
+        job = await database.get_job("__probe__")
+        checks["checks"]["database"] = "ok"
+    except Exception as e:
+        checks["checks"]["database"] = f"error: {e}"
+        checks["status"] = "degraded"
+
+    # ChromaDB
+    try:
+        from app.pipeline_v3 import get_chroma_client
+        client = get_chroma_client(settings)
+        client.heartbeat()
+        checks["checks"]["chromadb"] = "ok"
+    except Exception as e:
+        checks["checks"]["chromadb"] = f"error: {e}"
+        checks["status"] = "degraded"
+
+    # LLM reachability (only if not demo mode)
+    if not settings.demo_mode and settings.llm_api_key:
+        try:
+            if settings.llm_provider == "google":
+                from google import genai
+                client = genai.Client(api_key=settings.llm_api_key)
+                client.models.list()
+                checks["checks"]["llm"] = "ok"
+            else:
+                resp = httpx.get(
+                    f"{settings.llm_base_url}/models",
+                    headers={"Authorization": f"Bearer {settings.llm_api_key}"},
+                    timeout=5.0,
+                )
+                checks["checks"]["llm"] = "ok" if resp.status_code == 200 else f"error: {resp.status_code}"
+        except Exception as e:
+            checks["checks"]["llm"] = f"error: {e}"
+            checks["status"] = "degraded"
+    else:
+        checks["checks"]["llm"] = "skipped (demo mode)"
+
+    # Disk space
+    import shutil
+    usage = shutil.disk_usage(settings.output_dir)
+    free_gb = usage.free / (1024**3)
+    checks["checks"]["disk_free_gb"] = round(free_gb, 1)
+    if free_gb < 1.0:
+        checks["status"] = "degraded"
+
+    return checks
+```
+
+### 13.9 Test Suite
+
+#### `backend/tests/conftest.py`
+```python
+import pytest
+from fastapi.testclient import TestClient
+from app.main import app
+from app.config import Settings
+
+@pytest.fixture
+def client():
+    """Test client with demo mode enabled (no LLM calls)."""
+    return TestClient(app)
+
+@pytest.fixture
+def settings():
+    return Settings(demo_mode=True, api_key="test-key-123", auth_enabled=True)
+```
+
+#### `backend/tests/test_generator.py` — Math Engine Unit Tests
+
+These are the tests the CTO will care about most. They validate the mathematical correctness of the generation engine.
+
+```python
+import numpy as np
+from scipy import stats
+from app.agents.generator import (
+    build_correlation_matrix, nearest_psd, is_psd,
+    get_scipy_distribution, generate
+)
+from app.schemas import VariableSpec, StatisticalProfile
+
+class TestCorrelationMatrix:
+    def test_identity_with_no_correlations(self):
+        """No correlations → identity matrix."""
+        C = build_correlation_matrix(["a", "b", "c"], [])
+        assert np.allclose(C, np.eye(3))
+
+    def test_symmetric(self):
+        """Correlation matrix must be symmetric."""
+        C = build_correlation_matrix(["a", "b"], [("a", "b", 0.5)])
+        assert np.allclose(C, C.T)
+
+    def test_diagonal_ones(self):
+        """Diagonal must be 1."""
+        C = build_correlation_matrix(["a", "b", "c"], [("a", "b", 0.5), ("b", "c", -0.3)])
+        assert np.allclose(np.diag(C), 1.0)
+
+    def test_psd_correction(self):
+        """Invalid correlation matrix should be corrected to PSD."""
+        # Intentionally invalid: |rho| sum > 1 for some triplets
+        C = build_correlation_matrix(
+            ["a", "b", "c"],
+            [("a", "b", 0.9), ("b", "c", 0.9), ("a", "c", -0.9)]
+        )
+        assert is_psd(C)
+
+class TestNearestPSD:
+    def test_already_psd(self):
+        """PSD matrix should be returned unchanged (or nearly)."""
+        M = np.eye(3)
+        result = nearest_psd(M)
+        assert np.allclose(result, M, atol=1e-8)
+
+    def test_non_psd_corrected(self):
+        """Non-PSD matrix should be corrected."""
+        M = np.array([[1, 0.9, 0.9], [0.9, 1, -0.9], [0.9, -0.9, 1]])
+        result = nearest_psd(M)
+        assert is_psd(result)
+
+class TestDistributionMapping:
+    def test_normal(self):
+        spec = VariableSpec(distribution="normal", mean=10, std=2)
+        dist = get_scipy_distribution(spec)
+        assert abs(dist.mean() - 10) < 0.01
+
+    def test_beta_bounded(self):
+        """Beta distribution should produce values in [0, 1]."""
+        spec = VariableSpec(distribution="beta", alpha=2, beta=5)
+        dist = get_scipy_distribution(spec)
+        samples = dist.rvs(size=10000)
+        assert samples.min() >= 0 and samples.max() <= 1
+
+    def test_lognormal_positive(self):
+        """Lognormal should produce only positive values."""
+        spec = VariableSpec(distribution="lognormal", mu=1.0, sigma=0.5)
+        dist = get_scipy_distribution(spec)
+        samples = dist.rvs(size=10000)
+        assert samples.min() > 0
+
+class TestGenerate:
+    def _make_profile(self, n_entities=10, n_years=2, freq="quarterly"):
+        return StatisticalProfile(
+            asset_class="test",
+            num_entities=n_entities,
+            time_horizon_years=n_years,
+            frequency=freq,
+            variables={
+                "revenue": VariableSpec(distribution="lognormal", mu=18.0, sigma=0.4),
+                "margin": VariableSpec(distribution="beta", alpha=5, beta=2),
+            },
+            correlations=[("revenue", "margin", 0.5)],
+            temporal={"autocorrelation": 0.0},
+        )
+
+    def test_output_shape(self):
+        """Row count = n_entities × n_periods."""
+        profile = self._make_profile(n_entities=10, n_years=2, freq="quarterly")
+        df, _ = generate(profile, seed=42)
+        assert len(df) == 10 * 8  # 10 entities × (2 years × 4 quarters)
+
+    def test_deterministic_with_seed(self):
+        """Same seed → same output."""
+        profile = self._make_profile()
+        df1, _ = generate(profile, seed=42)
+        df2, _ = generate(profile, seed=42)
+        assert df1.equals(df2)
+
+    def test_different_seeds(self):
+        """Different seeds → different output."""
+        profile = self._make_profile()
+        df1, _ = generate(profile, seed=42)
+        df2, _ = generate(profile, seed=99)
+        assert not df1.equals(df2)
+
+    def test_correlations_preserved(self):
+        """Empirical correlation should approximate target."""
+        profile = self._make_profile(n_entities=500)
+        df, corr_matrix = generate(profile, seed=42)
+        empirical_corr = df[["revenue", "margin"]].corr().values[0, 1]
+        assert abs(empirical_corr - 0.5) < 0.1  # within 0.1 of target
+```
+
+#### `backend/tests/test_validator.py` — Validation + DP Tests
+
+```python
+import numpy as np
+import pandas as pd
+from app.agents.validator import ks_test, correlation_rmse, apply_differential_privacy
+from app.schemas import VariableSpec
+
+class TestKSTest:
+    def test_matching_distribution_passes(self):
+        """Data drawn from the correct distribution should pass KS test."""
+        spec = VariableSpec(distribution="normal", mean=0, std=1)
+        data = np.random.default_rng(42).normal(0, 1, 1000)
+        result = ks_test(data, spec)
+        assert result.passed is True
+        assert result.p_value > 0.05
+
+    def test_wrong_distribution_fails(self):
+        """Data from wrong distribution should fail KS test."""
+        spec = VariableSpec(distribution="normal", mean=100, std=1)
+        data = np.random.default_rng(42).normal(0, 1, 1000)
+        result = ks_test(data, spec)
+        assert result.passed is False
+
+class TestDP:
+    def test_noise_applied(self):
+        """DP should change the data."""
+        rng = np.random.default_rng(42)
+        df = pd.DataFrame({"x": rng.normal(0, 1, 100)})
+        original = df["x"].copy()
+        noised = apply_differential_privacy(df, ["x"], epsilon=1.0, rng=rng)
+        assert not np.allclose(original.values, noised["x"].values)
+
+    def test_higher_epsilon_less_noise(self):
+        """Higher epsilon → less noise (more utility)."""
+        rng1 = np.random.default_rng(42)
+        rng2 = np.random.default_rng(42)
+        df = pd.DataFrame({"x": np.random.default_rng(0).normal(0, 1, 1000)})
+        noised_low = apply_differential_privacy(df.copy(), ["x"], epsilon=0.1, rng=rng1)
+        noised_high = apply_differential_privacy(df.copy(), ["x"], epsilon=10.0, rng=rng2)
+        noise_low = np.abs(df["x"].values - noised_low["x"].values).mean()
+        noise_high = np.abs(df["x"].values - noised_high["x"].values).mean()
+        assert noise_low > noise_high
+```
+
+#### `backend/tests/test_api_v1.py` — Integration Tests
+
+```python
+from fastapi.testclient import TestClient
+from app.main import app
+
+client = TestClient(app)
+
+class TestHealthEndpoint:
+    def test_health_returns_ok(self):
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json()["status"] in ["ok", "degraded"]
+
+class TestTemplates:
+    def test_templates_returns_list(self):
+        resp = client.get("/api/v1/templates")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) >= 3  # PE LBO, VC Portfolio, Real Estate DCF
+
+class TestGenerateEndpoint:
+    def test_generate_with_profile_override(self):
+        """Full generation with explicit profile (no LLM)."""
+        payload = {
+            "profile_override": {
+                "asset_class": "test",
+                "num_entities": 5,
+                "time_horizon_years": 1,
+                "frequency": "quarterly",
+                "variables": {
+                    "revenue": {"distribution": "normal", "mean": 100, "std": 10}
+                },
+                "correlations": [],
+                "temporal": {"autocorrelation": 0.0}
+            },
+            "output_format": "csv",
+            "seed": 42
+        }
+        resp = client.post("/api/v1/generate", json=payload)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "completed"
+        assert data["validation_report"]["row_count"] == 20  # 5 entities × 4 quarters
+
+    def test_generate_missing_profile_returns_422(self):
+        """No LLM profiler and no profile_override → 422."""
+        resp = client.post("/api/v1/generate", json={})
+        assert resp.status_code == 422
+```
+
+### 13.10 New Dependencies
+
+**Add to `backend/requirements.txt`**:
+```
+aiosqlite>=0.20
+structlog>=24.0
+slowapi>=0.1.9
+tenacity>=9.0
+pytest>=8.0
+pytest-asyncio>=0.24
+httpx>=0.27   # already present, needed for TestClient
+```
+
+### 13.11 Config Additions
+
+```python
+class Settings(BaseSettings):
+    # ... existing fields ...
+    api_key: str = ""                      # API_KEY env var
+    auth_enabled: bool = True              # AUTH_ENABLED env var
+    log_level: str = "INFO"                # LOG_LEVEL env var
+    rate_limit_enabled: bool = True        # RATE_LIMIT_ENABLED env var
+```
+
+**`.env.example` additions**:
+```
+# Authentication
+API_KEY=your-api-key-here
+AUTH_ENABLED=true
+
+# Logging
+LOG_LEVEL=INFO
+
+# Rate limiting
+RATE_LIMIT_ENABLED=true
+```
+
+### 13.12 `main.py` Startup Changes
+
+```python
+@app.on_event("startup")
+async def startup_event():
+    settings = get_settings()
+    os.makedirs(settings.output_dir, exist_ok=True)
+
+    # Initialize SQLite
+    from app.database import init_db
+    await init_db()
+
+    # Initialize logging
+    from app.logging_config import setup_logging
+    setup_logging(settings.log_level)
+
+    # ... existing template generation ...
+```
+
+### 13.13 Acceptance Criteria — Phase 5
+
+**Auth**:
+- [ ] Requests without `X-API-Key` header → 401 on all `/api/*` routes
+- [ ] Requests with valid key → 200
+- [ ] `/health` remains unauthenticated
+- [ ] Demo mode bypasses auth entirely
+
+**Persistence**:
+- [ ] `jobs.db` created on startup in the output volume
+- [ ] Jobs survive container restart (`docker-compose restart backend`)
+- [ ] `/api/v1/generate` result retrievable after restart via job_id
+
+**Logging**:
+- [ ] All requests logged as JSON to stdout (method, path, status, duration)
+- [ ] Pipeline steps logged with job_id and duration
+- [ ] Errors logged with stack traces
+- [ ] `docker-compose logs backend` shows structured JSON
+
+**Rate Limiting**:
+- [ ] 11th request to `/api/v1/generate` within 1 minute → 429
+- [ ] Rate limit headers present in responses (`X-RateLimit-Limit`, `X-RateLimit-Remaining`)
+
+**Error Handling**:
+- [ ] Unhandled exception → 500 with `error_id` (not a stack trace)
+- [ ] LLM timeout → 1 retry, then clean error response
+- [ ] Invalid request body → 422 with field-level errors
+
+**Health Check**:
+- [ ] `/health` reports SQLite, ChromaDB, LLM, and disk space status
+- [ ] Degraded dependency → `"status": "degraded"` (not 500)
+
+**Tests**:
+- [ ] `pytest backend/tests/` passes with 0 failures
+- [ ] `test_generator.py`: PSD correction, correlation preservation, deterministic seeding, output shape
+- [ ] `test_validator.py`: KS-test accuracy, DP noise scaling
+- [ ] `test_api_v1.py`: health, templates, generate with override, 422 on missing profile
+- [ ] Tests run without LLM API key (no live LLM calls in tests)
+
+### 13.14 Gemini Implementation Notes
+
+> All Phase 3 notes (section 11.16) still apply, plus:
+
+10. **Auth bypass in tests**: Tests should either set `demo_mode=True` or pass `X-API-Key: test-key-123` header. Never skip auth by removing the dependency — test the auth layer too.
+
+11. **SQLite thread safety**: `aiosqlite` handles async access, but `BackgroundTasks` run in a thread pool. Use `asyncio.to_thread()` for DB calls within background tasks, or use synchronous `sqlite3` in those contexts.
+
+12. **Rate limiting in tests**: Disable rate limiting in test fixtures to avoid flaky tests. Set `RATE_LIMIT_ENABLED=false` in test settings.
+
+13. **Test isolation**: Each test should be independent. Use `seed=42` for deterministic generation. Don't depend on job IDs from previous tests.
+
+14. **No mocking the math**: The generator and validator tests must use real NumPy/SciPy — never mock the math. The whole point is proving the math is correct.

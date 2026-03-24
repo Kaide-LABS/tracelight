@@ -1,42 +1,93 @@
 {
-  "job_id": "demo_job_123",
-  "scenario": {
-    "natural_language": "Demo Scenario",
-    "use_llm_profiler": false
-  },
-  "privacy": {
-    "enabled": true,
-    "epsilon": 1.0
-  },
-  "output_format": "csv",
+  "job_id": "demo_job_synth_001",
+  "status": "completed",
+  "download_url": "/api/v1/download/demo_job_synth_001",
   "profile_used": {
-    "name": "Demo Profile",
+    "asset_class": "private_equity_lbo",
+    "num_entities": 50,
+    "time_horizon_years": 5,
+    "frequency": "quarterly",
     "variables": {
-      "Revenue": {
-        "type": "continuous"
+      "revenue": {
+        "distribution": "lognormal",
+        "mu": 18.0,
+        "sigma": 0.4
       },
-      "EBITDA": {
-        "type": "continuous"
+      "ebitda_margin": {
+        "distribution": "beta",
+        "alpha": 5,
+        "beta": 2
+      },
+      "leverage_ratio": {
+        "distribution": "normal",
+        "mean": 4.5,
+        "std": 1.2
+      },
+      "interest_rate": {
+        "distribution": "lognormal",
+        "mu": 0.04,
+        "sigma": 0.01
+      },
+      "capex_pct_revenue": {
+        "distribution": "uniform",
+        "low": 0.03,
+        "high": 0.08
       }
+    },
+    "correlations": [
+      [
+        "revenue",
+        "ebitda_margin",
+        0.55
+      ],
+      [
+        "leverage_ratio",
+        "interest_rate",
+        0.4
+      ],
+      [
+        "ebitda_margin",
+        "leverage_ratio",
+        -0.35
+      ]
+    ],
+    "temporal": {
+      "autocorrelation": 0.7
     }
   },
   "validation_report": {
     "row_count": 1000,
-    "correlation_rmse": 0.05,
-    "dp_applied": true,
-    "dp_epsilon": 1.0,
-    "post_dp_ks_all_passed": true,
     "ks_tests": {
-      "Revenue": {
-        "statistic": 0.02,
-        "p_value": 0.99,
+      "revenue": {
+        "statistic": 0.018,
+        "p_value": 0.87,
         "passed": true
       },
-      "EBITDA": {
-        "statistic": 0.03,
-        "p_value": 0.95,
+      "ebitda_margin": {
+        "statistic": 0.022,
+        "p_value": 0.74,
+        "passed": true
+      },
+      "leverage_ratio": {
+        "statistic": 0.015,
+        "p_value": 0.91,
+        "passed": true
+      },
+      "interest_rate": {
+        "statistic": 0.031,
+        "p_value": 0.58,
+        "passed": true
+      },
+      "capex_pct_revenue": {
+        "statistic": 0.012,
+        "p_value": 0.96,
         "passed": true
       }
-    }
-  }
+    },
+    "correlation_rmse": 0.013,
+    "dp_applied": true,
+    "dp_epsilon": 1.0,
+    "post_dp_ks_all_passed": true
+  },
+  "generated_at": "2026-03-24T14:30:00Z"
 }

@@ -1,34 +1,287 @@
 {
-  "job_id": "demo_comp_job_789",
+  "job_id": "demo_comp_job_003",
   "status": "completed",
   "total_questions": 20,
-  "auto_approved": 15,
-  "needs_review": 5,
+  "auto_approved": 16,
+  "needs_review": 4,
   "responses": [
     {
-      "question_id": "Q1",
-      "question_text": "Do you encrypt data at rest?",
+      "question_id": "SIG_D.1.1",
+      "question_text": "Do you encrypt data at rest using AES-256 or equivalent?",
       "domain": "Data Security",
       "response_type": "boolean",
-      "status": "auto_approved",
-      "confidence": 0.95,
       "boolean_value": true,
-      "response_text": "Yes, we use AES-256 encryption."
+      "response_text": "Yes. All data at rest is encrypted using AES-256 encryption across all storage systems, including databases, file stores, and backups [soc2_report.pdf:page_12].",
+      "confidence": 0.96,
+      "status": "auto_approved",
+      "citations": [
+        "soc2_report.pdf:page_12"
+      ],
+      "reviewer_notes": ""
     },
     {
-      "question_id": "Q2",
+      "question_id": "SIG_D.1.2",
+      "question_text": "Do you encrypt data in transit using TLS 1.2 or higher?",
+      "domain": "Data Security",
+      "response_type": "boolean",
+      "boolean_value": true,
+      "response_text": "Yes. All data in transit is encrypted using TLS 1.3. Legacy TLS versions below 1.2 are disabled at the load balancer level [soc2_report.pdf:page_13].",
+      "confidence": 0.94,
+      "status": "auto_approved",
+      "citations": [
+        "soc2_report.pdf:page_13"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_D.2.1",
+      "question_text": "Describe your data classification policy.",
+      "domain": "Data Security",
+      "response_type": "narrative",
+      "boolean_value": null,
+      "response_text": "Tracelight maintains a four-tier data classification framework: Public, Internal, Confidential, and Restricted. All customer financial model data is classified as Restricted and subject to the highest level of access controls and encryption requirements [security_policy.pdf:page_4]. Classification is enforced programmatically via automated tagging in our CI/CD pipeline.",
+      "confidence": 0.91,
+      "status": "auto_approved",
+      "citations": [
+        "security_policy.pdf:page_4"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_D.3.1",
+      "question_text": "Do you maintain a zero data retention policy for customer data after processing?",
+      "domain": "Data Security",
+      "response_type": "boolean",
+      "boolean_value": true,
+      "response_text": "Yes. Tracelight operates a zero-retention architecture. Customer spreadsheet data is processed ephemerally in memory and is never written to persistent storage. This is validated quarterly by our external auditors [soc2_report.pdf:page_18].",
+      "confidence": 0.97,
+      "status": "auto_approved",
+      "citations": [
+        "soc2_report.pdf:page_18"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_D.4.1",
+      "question_text": "Do you implement data loss prevention (DLP) controls?",
+      "domain": "Data Security",
+      "response_type": "boolean",
+      "boolean_value": true,
+      "response_text": "Yes. DLP controls are implemented at the endpoint, network, and application layers [REQUIRES REVIEW \u2014 INSUFFICIENT KB COVERAGE]. We monitor for unauthorized data exfiltration via our SIEM integration.",
+      "confidence": 0.52,
+      "status": "needs_review",
+      "citations": [],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_A.1.1",
+      "question_text": "Do you enforce multi-factor authentication for all user accounts?",
+      "domain": "Access Control",
+      "response_type": "boolean",
+      "boolean_value": true,
+      "response_text": "Yes. MFA is enforced for all employees, contractors, and administrative access to production systems. We use hardware security keys (FIDO2) as the primary second factor [security_policy.pdf:page_7].",
+      "confidence": 0.93,
+      "status": "auto_approved",
+      "citations": [
+        "security_policy.pdf:page_7"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_A.1.2",
+      "question_text": "Describe your role-based access control (RBAC) implementation.",
+      "domain": "Access Control",
+      "response_type": "narrative",
+      "boolean_value": null,
+      "response_text": "Tracelight implements RBAC across all production systems using a principle of least privilege model. Roles are defined per service and reviewed quarterly by the engineering leads. Access grants require manager approval and are logged in our IAM system [security_policy.pdf:page_8]. Privileged access to production databases requires additional just-in-time approval via our PAM solution.",
+      "confidence": 0.88,
+      "status": "auto_approved",
+      "citations": [
+        "security_policy.pdf:page_8"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_A.2.1",
+      "question_text": "Do you conduct periodic access reviews?",
+      "domain": "Access Control",
+      "response_type": "boolean",
+      "boolean_value": true,
+      "response_text": "Yes. Access reviews are conducted quarterly for all systems and monthly for privileged accounts. Stale accounts are automatically disabled after 90 days of inactivity [soc2_report.pdf:page_22].",
+      "confidence": 0.91,
+      "status": "auto_approved",
+      "citations": [
+        "soc2_report.pdf:page_22"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_A.3.1",
+      "question_text": "Describe your third-party vendor access management process.",
+      "domain": "Access Control",
+      "response_type": "narrative",
+      "boolean_value": null,
+      "response_text": "Third-party vendors are granted access on a time-limited, project-scoped basis only. All vendor access is provisioned through a dedicated VPN segment with network segmentation [REQUIRES REVIEW \u2014 INSUFFICIENT KB COVERAGE].",
+      "confidence": 0.45,
+      "status": "needs_review",
+      "citations": [],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_B.1.1",
+      "question_text": "Do you maintain a business continuity plan (BCP)?",
+      "domain": "Business Resiliency",
+      "response_type": "boolean",
+      "boolean_value": true,
+      "response_text": "Yes. Tracelight maintains a comprehensive BCP that is tested annually via tabletop exercises and bi-annually via failover drills. RTO is 4 hours and RPO is 1 hour for all critical systems [incident_response.pdf:page_3].",
+      "confidence": 0.92,
+      "status": "auto_approved",
+      "citations": [
+        "incident_response.pdf:page_3"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_B.1.2",
+      "question_text": "Describe your disaster recovery architecture.",
+      "domain": "Business Resiliency",
+      "response_type": "narrative",
+      "boolean_value": null,
+      "response_text": "Our production infrastructure runs on AWS across two availability zones (eu-west-1a, eu-west-1b) with automated failover. Database replication is synchronous with a standby in a third AZ. Full infrastructure can be reprovisioned from IaC templates in under 2 hours [incident_response.pdf:page_5]. Backups are replicated to a separate AWS region (eu-central-1) for geographic redundancy.",
+      "confidence": 0.9,
+      "status": "auto_approved",
+      "citations": [
+        "incident_response.pdf:page_5"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_B.2.1",
+      "question_text": "When was your BCP last tested?",
+      "domain": "Business Resiliency",
+      "response_type": "narrative",
+      "boolean_value": null,
+      "response_text": "The most recent full BCP test was conducted in Q4 2025. A tabletop exercise simulating a ransomware scenario was completed in January 2026 [incident_response.pdf:page_8].",
+      "confidence": 0.87,
+      "status": "auto_approved",
+      "citations": [
+        "incident_response.pdf:page_8"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_I.1.1",
       "question_text": "Describe your incident response plan.",
       "domain": "Incident Management",
-      "response_type": "text",
-      "status": "needs_review",
-      "confidence": 0.65,
+      "response_type": "narrative",
       "boolean_value": null,
-      "response_text": "We have a 24/7 SOC."
+      "response_text": "Tracelight operates a four-phase incident response framework: Detection, Containment, Eradication, and Recovery. The IRP is maintained by the CTO and reviewed quarterly. All incidents are classified by severity (P1-P4) with defined escalation paths and SLAs [incident_response.pdf:page_2]. P1 incidents trigger immediate notification to the founding team and affected customers within 24 hours.",
+      "confidence": 0.93,
+      "status": "auto_approved",
+      "citations": [
+        "incident_response.pdf:page_2"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_I.1.2",
+      "question_text": "Have you experienced any security breaches in the last 24 months?",
+      "domain": "Incident Management",
+      "response_type": "boolean",
+      "boolean_value": false,
+      "response_text": "No. Tracelight has not experienced any security breaches, data leaks, or unauthorized access incidents in the 24-month period ending March 2026. This is confirmed in our SOC 2 Type II report [soc2_report.pdf:page_31].",
+      "confidence": 0.95,
+      "status": "auto_approved",
+      "citations": [
+        "soc2_report.pdf:page_31"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_I.2.1",
+      "question_text": "Do you maintain 24/7 security monitoring?",
+      "domain": "Incident Management",
+      "response_type": "boolean",
+      "boolean_value": true,
+      "response_text": "Yes. We operate continuous security monitoring via a managed SIEM solution with 24/7 alerting. Critical alerts page the on-call engineer within 5 minutes [REQUIRES REVIEW \u2014 INSUFFICIENT KB COVERAGE].",
+      "confidence": 0.58,
+      "status": "needs_review",
+      "citations": [],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "CAIQ_AIS-01",
+      "question_text": "Do you use a cloud service provider that maintains SOC 2 Type II certification?",
+      "domain": "Cloud Security",
+      "response_type": "boolean",
+      "boolean_value": true,
+      "response_text": "Yes. Tracelight is hosted on AWS, which maintains SOC 2 Type II certification, ISO 27001, and PCI DSS compliance. AWS compliance reports are available via AWS Artifact [soc2_report.pdf:page_6].",
+      "confidence": 0.94,
+      "status": "auto_approved",
+      "citations": [
+        "soc2_report.pdf:page_6"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "CAIQ_BCR-01",
+      "question_text": "Describe your container security practices.",
+      "domain": "Cloud Security",
+      "response_type": "narrative",
+      "boolean_value": null,
+      "response_text": "All containers run on hardened, minimal base images (distroless) scanned in CI via Trivy. Runtime monitoring is provided by Falco. Container images are signed and stored in a private ECR registry with immutable tags [security_policy.pdf:page_15].",
+      "confidence": 0.86,
+      "status": "auto_approved",
+      "citations": [
+        "security_policy.pdf:page_15"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "CAIQ_IAM-01",
+      "question_text": "Do you enforce least-privilege access for cloud IAM roles?",
+      "domain": "Cloud Security",
+      "response_type": "boolean",
+      "boolean_value": true,
+      "response_text": "Yes. All AWS IAM roles follow least-privilege principles. Policies are defined in Terraform and reviewed in PR. No wildcard (*) actions are permitted in production accounts [security_policy.pdf:page_10].",
+      "confidence": 0.91,
+      "status": "auto_approved",
+      "citations": [
+        "security_policy.pdf:page_10"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_C.1.1",
+      "question_text": "Do you maintain SOC 2 Type II certification?",
+      "domain": "Compliance & Audit",
+      "response_type": "boolean",
+      "boolean_value": true,
+      "response_text": "Yes. Tracelight achieved SOC 2 Type II certification in 2025, covering the Trust Service Criteria of Security, Availability, and Confidentiality. The audit period covers January-December 2025 [soc2_report.pdf:page_1].",
+      "confidence": 0.98,
+      "status": "auto_approved",
+      "citations": [
+        "soc2_report.pdf:page_1"
+      ],
+      "reviewer_notes": ""
+    },
+    {
+      "question_id": "SIG_C.2.1",
+      "question_text": "Describe your approach to GDPR compliance for EU customer data.",
+      "domain": "Compliance & Audit",
+      "response_type": "narrative",
+      "boolean_value": null,
+      "response_text": "Tracelight processes customer data as a data processor under GDPR. Our zero-retention architecture means no personal data is stored post-processing. We maintain a Data Processing Agreement (DPA) template compliant with Standard Contractual Clauses [REQUIRES REVIEW \u2014 INSUFFICIENT KB COVERAGE]. Our DPO can be contacted at privacy@tracelight.ai.",
+      "confidence": 0.62,
+      "status": "needs_review",
+      "citations": [],
+      "reviewer_notes": ""
     }
   ],
   "download_urls": {
-    "csv": "/demo_data/phase3_sample_questionnaire.csv",
-    "docx": "/demo_data/phase3_sample_completed.docx",
-    "json": "/demo_data/phase3_sample_completed.json"
-  }
+    "csv": "/api/v3/compliance/download/demo_comp_job_003?fmt=csv",
+    "docx": "/api/v3/compliance/download/demo_comp_job_003?fmt=docx",
+    "json": "/api/v3/compliance/download/demo_comp_job_003?fmt=json"
+  },
+  "generated_at": "2026-03-24T15:30:00Z"
 }

@@ -1,3 +1,21 @@
-Question ID,Question,Domain
-Q1,Do you encrypt data at rest?,Data Security
-Q2,Describe your incident response plan.,Incident Management
+Question ID,Domain,Question,Response Type
+SIG_D.1.1,Data Security,Do you encrypt data at rest using AES-256 or equivalent?,boolean
+SIG_D.1.2,Data Security,Do you encrypt data in transit using TLS 1.2 or higher?,boolean
+SIG_D.2.1,Data Security,Describe your data classification policy.,narrative
+SIG_D.3.1,Data Security,Do you maintain a zero data retention policy for customer data after processing?,boolean
+SIG_D.4.1,Data Security,Do you implement data loss prevention (DLP) controls?,boolean
+SIG_A.1.1,Access Control,Do you enforce multi-factor authentication for all user accounts?,boolean
+SIG_A.1.2,Access Control,Describe your role-based access control (RBAC) implementation.,narrative
+SIG_A.2.1,Access Control,Do you conduct periodic access reviews?,boolean
+SIG_A.3.1,Access Control,Describe your third-party vendor access management process.,narrative
+SIG_B.1.1,Business Resiliency,Do you maintain a business continuity plan (BCP)?,boolean
+SIG_B.1.2,Business Resiliency,Describe your disaster recovery architecture.,narrative
+SIG_B.2.1,Business Resiliency,When was your BCP last tested?,narrative
+SIG_I.1.1,Incident Management,Describe your incident response plan.,narrative
+SIG_I.1.2,Incident Management,Have you experienced any security breaches in the last 24 months?,boolean
+SIG_I.2.1,Incident Management,Do you maintain 24/7 security monitoring?,boolean
+CAIQ_AIS-01,Cloud Security,Do you use a cloud service provider that maintains SOC 2 Type II certification?,boolean
+CAIQ_BCR-01,Cloud Security,Describe your container security practices.,narrative
+CAIQ_IAM-01,Cloud Security,Do you enforce least-privilege access for cloud IAM roles?,boolean
+SIG_C.1.1,Compliance & Audit,Do you maintain SOC 2 Type II certification?,boolean
+SIG_C.2.1,Compliance & Audit,Describe your approach to GDPR compliance for EU customer data.,narrative

@@ -1,19 +1,30 @@
 import os
 import uuid
-from fastapi import FastAPI, Depends, UploadFile, File, BackgroundTasks, HTTPException
+import httpx
+from fastapi import FastAPI, Depends, UploadFile, File, BackgroundTasks, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 from app.schemas import GenerateRequest, GenerateResponse
 from app.config import Settings
 from app.pipeline import run_pipeline
 from app.templates import PRESETS
+from app.auth import verify_api_key
+from app.database import init_db, get_job
+from app.logging_config import setup_logging, get_logger
+from app.middleware import limiter, RequestLoggingMiddleware
 
 # Phase 2 imports
 from app.schemas_v2 import MemoGenerateRequest, MemoGenerateResponse
-from app.pipeline_v2 import run_memo_pipeline, JOB_STATUS, JOB_RESULTS, get_chroma_client
+from app.pipeline_v2 import run_memo_pipeline, get_chroma_client
 from app.agents.context_harvester import ContextHarvester
 
 app = FastAPI(title="Tracelight Synthetic Data Generator API")
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(RequestLoggingMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,11 +37,19 @@ app.add_middleware(
 def get_settings():
     return Settings()
 
+log = get_logger("error_handler")
+
 @app.on_event("startup")
 async def startup_event():
     settings = get_settings()
     os.makedirs(settings.output_dir, exist_ok=True)
     os.makedirs("app/templates_v2", exist_ok=True)
+    
+    # Initialize SQLite
+    await init_db()
+
+    # Initialize logging
+    setup_logging(settings.log_level)
     
     # Generate default templates if missing
     import docx
@@ -56,12 +75,28 @@ async def startup_event():
         subtitle.text = "Tracelight Generated"
         prs.save(pptx_path)
 
-@app.post("/api/v1/generate", response_model=GenerateResponse)
-async def generate_data(request: GenerateRequest, settings: Settings = Depends(get_settings)):
-    return await run_pipeline(request, settings)
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    log.error(
+        "unhandled_exception",
+        path=request.url.path,
+        method=request.method,
+        error=str(exc),
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "error_id": str(uuid.uuid4())},
+    )
 
-@app.get("/api/v1/download/{job_id}")
-async def download_data(job_id: str, settings: Settings = Depends(get_settings)):
+@app.post("/api/v1/generate", response_model=GenerateResponse, dependencies=[Depends(verify_api_key)])
+@limiter.limit("10/minute")
+async def generate_data(request: Request, body: GenerateRequest, settings: Settings = Depends(get_settings)):
+    return await run_pipeline(body, settings)
+
+@app.get("/api/v1/download/{job_id}", dependencies=[Depends(verify_api_key)])
+@limiter.limit("60/minute")
+async def download_data(request: Request, job_id: str, settings: Settings = Depends(get_settings)):
     csv_path = f"{settings.output_dir}/{job_id}.csv"
     json_path = f"{settings.output_dir}/{job_id}.json"
     
@@ -72,14 +107,16 @@ async def download_data(job_id: str, settings: Settings = Depends(get_settings))
     
     raise HTTPException(status_code=404, detail="File not found")
 
-@app.get("/api/v1/templates")
-async def get_templates():
+@app.get("/api/v1/templates", dependencies=[Depends(verify_api_key)])
+@limiter.limit("60/minute")
+async def get_templates(request: Request):
     return PRESETS
 
 # ======================= PHASE 2 ROUTES =======================
 
-@app.post("/api/v2/memo/upload-sources")
-async def upload_sources(files: list[UploadFile] = File(...)):
+@app.post("/api/v2/memo/upload-sources", dependencies=[Depends(verify_api_key)])
+@limiter.limit("20/minute")
+async def upload_sources(request: Request, files: list[UploadFile] = File(...)):
     session_id = str(uuid.uuid4())
     harvester = ContextHarvester(get_chroma_client())
     
@@ -99,12 +136,16 @@ async def upload_sources(files: list[UploadFile] = File(...)):
         
     return {"session_id": session_id}
 
-@app.post("/api/v2/memo/generate", response_model=MemoGenerateResponse)
-async def generate_memo(request: MemoGenerateRequest, background_tasks: BackgroundTasks, settings: Settings = Depends(get_settings)):
+@app.post("/api/v2/memo/generate", response_model=MemoGenerateResponse, dependencies=[Depends(verify_api_key)])
+@limiter.limit("5/minute")
+async def generate_memo(request: Request, body: MemoGenerateRequest, background_tasks: BackgroundTasks, settings: Settings = Depends(get_settings)):
     job_id = str(uuid.uuid4())
     
+    from app.database import create_job
+    await create_job(job_id, "v2", body.model_dump())
+    
     # Run async pipeline
-    background_tasks.add_task(run_memo_pipeline, job_id, request, settings)
+    background_tasks.add_task(run_memo_pipeline, job_id, body, settings)
     
     return MemoGenerateResponse(
         job_id=job_id,
@@ -112,27 +153,31 @@ async def generate_memo(request: MemoGenerateRequest, background_tasks: Backgrou
         generated_at=str(uuid.uuid1())
     )
 
-@app.get("/api/v2/memo/status/{job_id}", response_model=MemoGenerateResponse)
-async def get_memo_status(job_id: str):
-    if job_id not in JOB_STATUS:
+@app.get("/api/v2/memo/status/{job_id}", response_model=MemoGenerateResponse, dependencies=[Depends(verify_api_key)])
+@limiter.limit("60/minute")
+async def get_memo_status(request: Request, job_id: str):
+    job = await get_job(job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
         
-    status = JOB_STATUS[job_id]
-    sections = JOB_RESULTS.get(job_id, [])
+    status = job["status"]
+    sections = job["result"] if status == "completed" and job.get("result") else None
     
-    urls = JOB_RESULTS.get(job_id + "_urls", {})
+    # We still need URLs if any are generated - pipeline_v2 must store them in result
+    urls = job.get("result", {}).get("urls", {}) if isinstance(job.get("result"), dict) else {}
     
     return MemoGenerateResponse(
         job_id=job_id,
         status=status,
-        sections=sections if isinstance(sections, list) else None,
+        sections=sections.get("sections") if isinstance(sections, dict) and "sections" in sections else (sections if isinstance(sections, list) else None),
         download_urls=urls,
         audit_trail_url=urls.get("audit_trail") if urls else None,
-        generated_at=""
+        generated_at=job.get("updated_at", "")
     )
 
-@app.get("/api/v2/memo/download/{job_id}")
-async def download_memo(job_id: str, fmt: str, settings: Settings = Depends(get_settings)):
+@app.get("/api/v2/memo/download/{job_id}", dependencies=[Depends(verify_api_key)])
+@limiter.limit("60/minute")
+async def download_memo(request: Request, job_id: str, fmt: str, settings: Settings = Depends(get_settings)):
     if fmt == "docx":
         path = f"{settings.output_dir}/{job_id}.docx"
         media = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -159,8 +204,9 @@ from app.agents.intake_parser import IntakeParserAgent
 import json
 import shutil
 
-@app.post("/api/v3/compliance/upload-kb")
-async def upload_kb(files: list[UploadFile] = File(...), settings: Settings = Depends(get_settings)):
+@app.post("/api/v3/compliance/upload-kb", dependencies=[Depends(verify_api_key)])
+@limiter.limit("20/minute")
+async def upload_kb(request: Request, files: list[UploadFile] = File(...), settings: Settings = Depends(get_settings)):
     client = get_chroma_client_v3(settings)
     retriever = KBRetrieverAgent(client)
     
@@ -179,8 +225,9 @@ async def upload_kb(files: list[UploadFile] = File(...), settings: Settings = De
         
     return {"status": "success", "message": f"Indexed {len(files)} files into KB"}
 
-@app.post("/api/v3/compliance/upload-questionnaire")
-async def upload_questionnaire(file: UploadFile = File(...)):
+@app.post("/api/v3/compliance/upload-questionnaire", dependencies=[Depends(verify_api_key)])
+@limiter.limit("20/minute")
+async def upload_questionnaire(request: Request, file: UploadFile = File(...)):
     if file.filename.endswith('.xlsx'):
         raise HTTPException(status_code=400, detail="XLSX files are strictly forbidden (DMZ rule).")
         
@@ -205,36 +252,40 @@ async def upload_questionnaire(file: UploadFile = File(...)):
         "domains": domains
     }
 
-@app.post("/api/v3/compliance/generate", response_model=ComplianceGenerateResponse)
-async def generate_compliance(request: ComplianceGenerateRequest, background_tasks: BackgroundTasks, settings: Settings = Depends(get_settings)):
-    if request.questionnaire_session_id not in questionnaires_db:
+@app.post("/api/v3/compliance/generate", response_model=ComplianceGenerateResponse, dependencies=[Depends(verify_api_key)])
+@limiter.limit("5/minute")
+async def generate_compliance(request: Request, body: ComplianceGenerateRequest, background_tasks: BackgroundTasks, settings: Settings = Depends(get_settings)):
+    if body.questionnaire_session_id not in questionnaires_db:
         raise HTTPException(status_code=404, detail="Questionnaire session not found")
         
-    job_id = start_compliance_job(request, background_tasks, settings)
-    return get_job_status(job_id)
+    job_id = await start_compliance_job(body, background_tasks, settings)
+    return await get_job_status(job_id)
 
-@app.get("/api/v3/compliance/status/{job_id}", response_model=ComplianceGenerateResponse)
-async def get_compliance_status(job_id: str):
+@app.get("/api/v3/compliance/status/{job_id}", response_model=ComplianceGenerateResponse, dependencies=[Depends(verify_api_key)])
+@limiter.limit("60/minute")
+async def get_compliance_status(request: Request, job_id: str):
     try:
-        return get_job_status(job_id)
+        return await get_job_status(job_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="Job not found")
 
-@app.patch("/api/v3/compliance/review/{job_id}/{question_id}")
-async def review_compliance_response(job_id: str, question_id: str, update: ReviewUpdate, settings: Settings = Depends(get_settings)):
+@app.patch("/api/v3/compliance/review/{job_id}/{question_id}", dependencies=[Depends(verify_api_key)])
+@limiter.limit("60/minute")
+async def review_compliance_response(request: Request, job_id: str, question_id: str, update: ReviewUpdate, settings: Settings = Depends(get_settings)):
     try:
-        success = update_job_response(job_id, question_id, update.dict(exclude_unset=True))
+        success = await update_job_response(job_id, question_id, update.dict(exclude_unset=True))
         if not success:
             raise HTTPException(status_code=404, detail="Question not found in job")
         
         # Regenerate exports after review update
-        regenerate_exports(job_id, settings)
+        await regenerate_exports(job_id, settings)
         return {"status": "success"}
     except KeyError:
         raise HTTPException(status_code=404, detail="Job not found")
 
-@app.get("/api/v3/compliance/download/{job_id}")
-async def download_compliance(job_id: str, fmt: str, settings: Settings = Depends(get_settings)):
+@app.get("/api/v3/compliance/download/{job_id}", dependencies=[Depends(verify_api_key)])
+@limiter.limit("60/minute")
+async def download_compliance(request: Request, job_id: str, fmt: str, settings: Settings = Depends(get_settings)):
     if fmt == "csv":
         path = f"{settings.output_dir}/{job_id}_questionnaire.csv"
         media = "text/csv"
@@ -253,5 +304,56 @@ async def download_compliance(job_id: str, fmt: str, settings: Settings = Depend
     raise HTTPException(status_code=404, detail="File not found")
 
 @app.get("/health")
-async def health_check():
-    return {"status": "ok"}
+async def health_check(settings: Settings = Depends(get_settings)):
+    checks = {"status": "ok", "checks": {}}
+
+    # SQLite
+    try:
+        from app.database import get_job
+        job = await get_job("__probe__")
+        checks["checks"]["database"] = "ok"
+    except Exception as e:
+        checks["checks"]["database"] = f"error: {e}"
+        checks["status"] = "degraded"
+
+    # ChromaDB
+    try:
+        from app.pipeline_v3 import get_chroma_client as get_chroma_client_v3
+        client = get_chroma_client_v3(settings)
+        client.heartbeat()
+        checks["checks"]["chromadb"] = "ok"
+    except Exception as e:
+        checks["checks"]["chromadb"] = f"error: {e}"
+        checks["status"] = "degraded"
+
+    # LLM reachability (only if not demo mode)
+    if not settings.demo_mode and settings.llm_api_key:
+        try:
+            if settings.llm_provider == "google":
+                from google import genai
+                client = genai.Client(api_key=settings.llm_api_key)
+                client.models.list()
+                checks["checks"]["llm"] = "ok"
+            else:
+                import httpx
+                resp = httpx.get(
+                    f"{settings.llm_base_url}/models",
+                    headers={"Authorization": f"Bearer {settings.llm_api_key}"},
+                    timeout=5.0,
+                )
+                checks["checks"]["llm"] = "ok" if resp.status_code == 200 else f"error: {resp.status_code}"
+        except Exception as e:
+            checks["checks"]["llm"] = f"error: {e}"
+            checks["status"] = "degraded"
+    else:
+        checks["checks"]["llm"] = "skipped (demo mode)"
+
+    # Disk space
+    import shutil
+    usage = shutil.disk_usage(settings.output_dir)
+    free_gb = usage.free / (1024**3)
+    checks["checks"]["disk_free_gb"] = round(free_gb, 1)
+    if free_gb < 1.0:
+        checks["status"] = "degraded"
+
+    return checks

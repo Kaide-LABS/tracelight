@@ -121,3 +121,45 @@
 ### Verdict: Approve. The critical LLM pattern issue from Phase 2 is fixed. Main gap is the missing frontend tab — needs to be added.
 
 ---
+
+## 2026-03-24 - Phase 4 Implementation Review (Claude reviewing Gemini's code)
+
+### Review Summary: GOOD execution. Demo mode works. Theme needs fixing.
+
+### What Gemini Got Right:
+1. **Landing page**: Three workflow cards with navigation via `st.session_state["current_page"]`. Clean layout.
+2. **Demo mode**: Properly wired — `st.session_state["demo_mode"]` toggle in sidebar, all 3 workflows branch on it to load cached JSON/CSV instead of API calls. Simulated delays with `time.sleep()` for realism.
+3. **Custom CSS**: Streamlit branding hidden, custom metric cards, confidence badge colors, workflow card styling.
+4. **Dockerfile**: Correctly copies `.streamlit/`, `demo_data/`, `assets/` directories.
+5. **Docker-compose**: `DEMO_MODE=true` default, demo_data mounted as read-only volume.
+6. **Config.py**: `demo_mode: bool = False` added to Settings.
+7. **Demo seed script**: Generates all 8 fixture files with valid structure.
+8. **Frontend Phase 3 tab**: Present and working (was missing in my earlier review — Gemini already had it).
+9. **Logo**: Custom `assets/logo.jpeg` included.
+10. **KS test color coding**: Pass/fail highlighting via `style.map()`.
+11. **Phase 2 download buttons**: Properly use `st.download_button` with file bytes in demo mode (not broken markdown links).
+12. **`backend_and_frontend_setup/`**: Removed (cleanup from previous review).
+13. **`__pycache__` .gitignore**: Still committed one `__pycache__` in frontend — needs cleanup.
+
+### Issues Found:
+
+**1. Theme is WRONG (MODERATE)**
+- `config.toml` uses `backgroundColor = "#ffffff"` (white) and `textColor = "#000000"` (black)
+- PRD spec calls for dark theme: `backgroundColor = "#0A1F0D"`, `textColor = "#E8F5E9"`
+- This is the **opposite** of Tracelight's dark, institutional green aesthetic
+- The CSS `.workflow-card` also uses white background instead of dark green
+
+**2. Demo data is too thin (MODERATE)**
+- Phase 1 CSV only has 5 rows and 2 columns. Spec calls for 50 entities × 20 quarters × 5 variables = 1000+ rows. Charts will look pathetic with 5 data points.
+- Phase 2 sections have placeholder text ("This is a demo executive summary") — should have realistic IC memo content with inline `[source_tag]` citations to demonstrate the citation enforcement feature.
+- Phase 3 only has 2 responses but claims `total_questions: 20` and `auto_approved: 15` — frontend will break or look empty.
+
+**3. Phase 1 demo profile structure doesn't match schema (MINOR)**
+- `phase1_sample_response.json` has `"variables": {"Revenue": {"type": "continuous"}}` but the real schema has `distribution`, `mean`, `std`, etc. Frontend may fail when trying to extract `var_names` from this malformed profile.
+
+**4. `__pycache__` still in repo (HYGIENE)**
+- `frontend/__pycache__/app.cpython-313.pyc` committed again despite `.gitignore` fix
+
+### Verdict: Approve with fixes for #1 (theme colors) and #2 (demo data quality). The dark theme is critical for the pitch aesthetic. The thin demo data undermines the entire purpose of Phase 4.
+
+---

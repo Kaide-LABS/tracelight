@@ -1,41 +1,84 @@
 {
-  "job_id": "demo_memo_job_456",
+  "job_id": "demo_memo_job_002",
   "status": "completed",
   "sections": [
     {
+      "section_id": "executive_summary",
       "title": "Executive Summary",
-      "content": "This is a demo executive summary.",
-      "confidence": 0.95,
-      "needs_review": false
-    },
-    {
-      "title": "Investment Thesis",
-      "content": "This is a demo investment thesis.",
-      "confidence": 0.85,
-      "needs_review": false
-    },
-    {
-      "title": "Market Analysis",
-      "content": "This is a demo market analysis.",
-      "confidence": 0.45,
-      "needs_review": true
-    },
-    {
-      "title": "Financial Projections",
-      "content": "This is a demo financial projection.",
+      "content": "**Recommendation: Proceed with acquisition.**\n\nAcme Capital should acquire TargetCo at an implied enterprise value of $485M (7.2x LTM EBITDA) [model_export:ebitda_margin:mean]. The target operates in a structurally attractive sub-segment of European industrials with demonstrated pricing power and a 23% EBITDA margin [model_export:ebitda_margin:p50].\n\nThe base case IRR of 22.4% [model_export:revenue:mean] is supported by three core value drivers: (1) margin expansion from operational improvements, (2) bolt-on M&A in fragmented adjacent markets, and (3) working capital optimization.\n\n**Key risks**: Cyclical revenue exposure mitigated by diversified end-market mix [cim_report.pdf:page_8], and integration complexity addressed through a dedicated 100-day plan [management_deck.pdf:page_14].",
+      "citations": [
+        "model_export:ebitda_margin:mean",
+        "model_export:ebitda_margin:p50",
+        "model_export:revenue:mean",
+        "cim_report.pdf:page_8",
+        "management_deck.pdf:page_14"
+      ],
       "confidence": 0.92,
       "needs_review": false
     },
     {
-      "title": "Deal Structure",
-      "content": "This is a demo deal structure.",
+      "section_id": "investment_thesis",
+      "title": "Investment Thesis",
+      "content": "The investment thesis rests on three pillars:\n\n**1. Margin Expansion (500bps over 5 years)**\nTargetCo currently operates at a 23% EBITDA margin [model_export:ebitda_margin:p50] versus best-in-class peers at 28%. Management has identified $12M of run-rate cost savings through procurement consolidation and plant rationalization [management_deck.pdf:page_22].\n\n**2. Inorganic Growth via Bolt-On M&A**\nThe European industrials sub-segment remains highly fragmented with 200+ sub-scale operators [cim_report.pdf:page_15]. TargetCo has a demonstrated track record of 4 successful acquisitions over 2019-2024 [cim_report.pdf:page_18].\n\n**3. Working Capital Optimization**\nCurrent DSO of 68 days [model_export:leverage_ratio:mean] significantly exceeds the industry benchmark of 45 days. Implementing structured receivables management is expected to release $18M of trapped cash within 18 months.",
+      "citations": [
+        "model_export:ebitda_margin:p50",
+        "management_deck.pdf:page_22",
+        "cim_report.pdf:page_15",
+        "cim_report.pdf:page_18",
+        "model_export:leverage_ratio:mean"
+      ],
       "confidence": 0.88,
       "needs_review": false
     },
     {
+      "section_id": "market_analysis",
+      "title": "Market Analysis",
+      "content": "The European mid-market industrials sector is projected to grow at a 4.2% CAGR through 2030 [cim_report.pdf:page_6], driven by reshoring trends and infrastructure investment.\n\nTargetCo holds a #3 market position with 8% share in its core segment [cim_report.pdf:page_9]. The competitive landscape is characterized by rational pricing behavior \u2014 the top 5 players collectively hold 35% share, with limited history of destructive price competition.\n\n**Regulatory tailwinds**: EU Green Deal mandates are driving accelerated replacement cycles in TargetCo's core product categories [INSUFFICIENT DATA \u2014 REQUIRES ANALYST INPUT].\n\n**Customer concentration**: Top 10 customers represent 42% of revenue [cim_report.pdf:page_11], a moderate level for the sector.",
+      "citations": [
+        "cim_report.pdf:page_6",
+        "cim_report.pdf:page_9",
+        "cim_report.pdf:page_11"
+      ],
+      "confidence": 0.71,
+      "needs_review": true
+    },
+    {
+      "section_id": "financial_projections",
+      "title": "Financial Projections",
+      "content": "**Base Case (60% probability)**\n- Revenue CAGR: 6.8% [model_export:revenue:mean]\n- Exit EBITDA margin: 28% (from 23% at entry) [model_export:ebitda_margin:mean]\n- Entry multiple: 7.2x | Exit multiple: 7.5x\n- Gross IRR: 22.4% | Gross MOIC: 2.8x\n\n**Downside Case (25% probability)**\n- Revenue CAGR: 3.1% [model_export:revenue:p10]\n- Exit EBITDA margin: 24%\n- Entry multiple: 7.2x | Exit multiple: 6.5x\n- Gross IRR: 12.8% | Gross MOIC: 1.8x\n\n**Upside Case (15% probability)**\n- Revenue CAGR: 9.2% [model_export:revenue:p90]\n- Exit EBITDA margin: 31%\n- Gross IRR: 31.2% | Gross MOIC: 3.6x\n\nSensitivity analysis confirms that the investment returns >15% IRR in 85% of scenarios [model_export:capex_pct_revenue:mean].",
+      "citations": [
+        "model_export:revenue:mean",
+        "model_export:ebitda_margin:mean",
+        "model_export:revenue:p10",
+        "model_export:revenue:p90",
+        "model_export:capex_pct_revenue:mean"
+      ],
+      "confidence": 0.95,
+      "needs_review": false
+    },
+    {
+      "section_id": "deal_structure",
+      "title": "Deal Structure",
+      "content": "**Transaction Overview**\n- Enterprise Value: $485M (7.2x LTM EBITDA)\n- Equity Contribution: $195M (40%)\n- Senior Debt: $242M (4.0x leverage) [model_export:leverage_ratio:mean]\n- Mezzanine: $48M (0.8x)\n- Total Leverage: 4.8x [model_export:interest_rate:mean]\n\n**Debt Terms**\n- Senior: SOFR + 450bps, 7-year tenor, 1% annual amortization\n- Mezzanine: 12% cash / 2% PIK, bullet maturity at Year 6\n- Estimated blended cost of debt: 8.2% [model_export:interest_rate:median]\n\n**Key Covenants**: Total leverage \u22646.0x, interest coverage \u22652.0x, minimum liquidity $15M.",
+      "citations": [
+        "model_export:leverage_ratio:mean",
+        "model_export:interest_rate:mean",
+        "model_export:interest_rate:median"
+      ],
+      "confidence": 0.9,
+      "needs_review": false
+    },
+    {
+      "section_id": "risk_mitigation",
       "title": "Risk Mitigation",
-      "content": "This is a demo risk mitigation.",
-      "confidence": 0.75,
+      "content": "| Risk | Probability | Impact | Mitigation |\n|------|------------|--------|------------|\n| Cyclical revenue decline | Medium | High | Diversified end-market exposure across 6 verticals [cim_report.pdf:page_8] |\n| Integration execution | Medium | Medium | Dedicated integration PMO; 100-day plan developed with management [management_deck.pdf:page_14] |\n| Key person dependency | Low | High | CEO succession plan in place; depth in senior leadership team [management_deck.pdf:page_5] |\n| FX exposure (EUR/GBP) | Medium | Low | Natural hedge via matched currency revenues/costs; residual hedged via forwards |\n| Customer concentration | Low | Medium | Top 10 at 42% \u2014 contractual minimums with top 3 customers [cim_report.pdf:page_11] |\n\n**Overall risk rating**: Moderate. The defensive characteristics of the business and proven management team provide sufficient downside protection.",
+      "citations": [
+        "cim_report.pdf:page_8",
+        "management_deck.pdf:page_14",
+        "management_deck.pdf:page_5",
+        "cim_report.pdf:page_11"
+      ],
+      "confidence": 0.85,
       "needs_review": false
     }
   ],
@@ -43,5 +86,6 @@
     "docx": "/demo_data/phase2_sample_memo.docx",
     "pptx": "/demo_data/phase2_sample_deck.pptx",
     "audit_trail": "/demo_data/audit_trail.json"
-  }
+  },
+  "generated_at": "2026-03-24T15:00:00Z"
 }

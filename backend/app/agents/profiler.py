@@ -7,12 +7,22 @@ from fastapi import HTTPException
 from app.schemas import StatisticalProfile
 from app.config import Settings
 import os
+import tenacity
+from app.logging_config import get_logger
+
+log = get_logger("profiler")
 
 def render_prompt(scenario: str) -> str:
     env = Environment(loader=FileSystemLoader(os.path.join(os.path.dirname(__file__), '..', 'prompts')))
     template = env.get_template('profile_suggest.j2')
     return template.render(user_scenario=scenario)
 
+@tenacity.retry(
+    stop=tenacity.stop_after_attempt(2),
+    wait=tenacity.wait_exponential(min=1, max=5),
+    retry=tenacity.retry_if_exception_type((httpx.TimeoutException, httpx.ConnectError)),
+    before_sleep=lambda retry_state: log.warning("llm_retry", attempt=retry_state.attempt_number),
+)
 async def generate_profile(scenario: str, settings: Settings) -> StatisticalProfile:
     rendered_prompt = render_prompt(scenario)
     

@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     max_entities: int = 10000
     output_dir: str = "/tmp/synth_output"
     chroma_persist_dir: str = "/tmp/chroma_data"
+    
+    api_key: str = ""                      # API_KEY env var
+    auth_enabled: bool = True              # AUTH_ENABLED env var
+    log_level: str = "INFO"                # LOG_LEVEL env var
+    rate_limit_enabled: bool = True        # RATE_LIMIT_ENABLED env var
 
     class Config:
         env_file = ".env"

@@ -4,6 +4,10 @@ from jinja2 import Environment, FileSystemLoader
 from typing import List
 from app.schemas_v3 import QuestionItem, DraftResponse, RetrievedEvidence, ComplianceConfig
 from app.config import Settings
+import tenacity
+from app.logging_config import get_logger
+
+log = get_logger("response_drafter")
 
 class ResponseDrafterAgent:
     def __init__(self, settings: Settings):
@@ -18,6 +22,12 @@ class ResponseDrafterAgent:
         else:
             self.google_client = None
 
+    @tenacity.retry(
+        stop=tenacity.stop_after_attempt(2),
+        wait=tenacity.wait_exponential(min=1, max=5),
+        retry=tenacity.retry_if_exception_type((httpx.TimeoutException, httpx.ConnectError)),
+        before_sleep=lambda retry_state: log.warning("llm_retry", attempt=retry_state.attempt_number),
+    )
     def _call_llm(self, prompt: str) -> str:
         """Dual-provider LLM call."""
         if self.settings.llm_provider == "google":

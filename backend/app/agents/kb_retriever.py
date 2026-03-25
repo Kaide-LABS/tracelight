@@ -1,12 +1,16 @@
 import os
 import fitz  # PyMuPDF
 import docx
-import chromadb
-from sentence_transformers import SentenceTransformer
+try:
+    import chromadb
+except ImportError:
+    chromadb = None
+try:
+    from sentence_transformers import SentenceTransformer
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+except ImportError:
+    model = None
 from typing import List, Dict, Any
-
-# Initialize model once
-model = SentenceTransformer('all-MiniLM-L6-v2')
 
 class KBRetrieverAgent:
     def __init__(self, chroma_client):

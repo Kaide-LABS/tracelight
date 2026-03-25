@@ -3,13 +3,15 @@ import httpx
 from jinja2 import Environment, FileSystemLoader
 from app.schemas_v2 import MemoSection, CitedMetrics, MemoConfig
 from app.config import Settings
-from sentence_transformers import SentenceTransformer
+try:
+    from sentence_transformers import SentenceTransformer
+    embed_model = SentenceTransformer('all-MiniLM-L6-v2')
+except ImportError:
+    embed_model = None
 import tenacity
 from app.logging_config import get_logger
 
 log = get_logger("narrative_drafter")
-
-embed_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 
 class NarrativeDrafter:

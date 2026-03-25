@@ -1,11 +1,15 @@
 import os
 import fitz  # PyMuPDF
 import docx
-import chromadb
-from sentence_transformers import SentenceTransformer
-
-# Initialize model once
-model = SentenceTransformer('all-MiniLM-L6-v2')
+try:
+    import chromadb
+except ImportError:
+    chromadb = None
+try:
+    from sentence_transformers import SentenceTransformer
+    model = SentenceTransformer('all-MiniLM-L6-v2')
+except ImportError:
+    model = None
 
 class ContextHarvester:
     def __init__(self, chroma_client=None):

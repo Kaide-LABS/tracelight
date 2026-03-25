@@ -1,6 +1,9 @@
 import time
 import uuid
-import chromadb
+try:
+    import chromadb
+except ImportError:
+    chromadb = None
 from app.schemas_v2 import MemoGenerateRequest, MemoSection
 from app.agents.quant_extractor import QuantExtractor
 from app.agents.narrative_drafter import NarrativeDrafter
@@ -11,7 +14,7 @@ from app.logging_config import get_logger
 log = get_logger("pipeline_v2")
 
 # Keep a single client in memory
-chroma_client = chromadb.EphemeralClient()
+chroma_client = chromadb.EphemeralClient() if chromadb else None
 
 def get_chroma_client():
     return chroma_client

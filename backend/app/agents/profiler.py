@@ -1,7 +1,10 @@
 import json
 import httpx
 from jinja2 import Environment, FileSystemLoader
-from google import genai
+try:
+    from google import genai
+except ImportError:
+    genai = None
 from pydantic import ValidationError
 from fastapi import HTTPException
 from app.schemas import StatisticalProfile

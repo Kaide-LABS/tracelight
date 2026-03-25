@@ -34,7 +34,7 @@ st.markdown("""
 
     /* Landing page cards - Dark theme */
     .workflow-card {
-        background: #12291A;
+        background: #004d2e;
         border: 1px solid #2E7D32;
         border-radius: 12px;
         padding: 24px;

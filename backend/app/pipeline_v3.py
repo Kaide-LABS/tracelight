@@ -5,7 +5,10 @@ import datetime
 import traceback
 from typing import Dict, Any, List
 from fastapi import BackgroundTasks
-import chromadb
+try:
+    import chromadb
+except ImportError:
+    chromadb = None
 from app.config import Settings
 from app.schemas_v3 import (
     ComplianceGenerateRequest, ComplianceGenerateResponse, 

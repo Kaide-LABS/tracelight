@@ -7,10 +7,14 @@ import time
 import json
 import os
 import io
+import base64
+import mammoth
+from pptx import Presentation
+from pptx.util import Inches, Pt, Emu
 
-API_URL = "http://backend:8000/api/v1"
-API_V2_URL = "http://backend:8000/api/v2/memo"
-API_V3_URL = "http://backend:8000/api/v3/compliance"
+BACKEND_HOST = os.environ.get("BACKEND_URL", "http://backend:8000")
+API_URL = f"{BACKEND_HOST}/api/v1"
+API_V2_URL = f"{BACKEND_HOST}/api/v2/memo"
 
 st.set_page_config(page_title="Tracelight", layout="wide")
 
@@ -75,20 +79,20 @@ if st.session_state["current_page"] == "landing":
     st.image("assets/logo.jpeg", width=200)
     st.markdown("## Tracelight Ecosystem — Agentic Sidecar Demos")
     
-    col1, col2, col3 = st.columns(3)
-    
+    col1, col2 = st.columns(2)
+
     with col1:
         st.markdown("""
         <div class="workflow-card">
             <h3>Workflow I</h3>
             <h4>Synthetic Data Engine</h4>
-            <p>Collapse PoC timelines from 6mo to 6 minutes.</p>
+            <p>Collapse PoC timelines from 6mo to 60 seconds.</p>
         </div>
         """, unsafe_allow_html=True)
         if st.button("Launch Workflow I →", key="launch_1", use_container_width=True):
             st.session_state["current_page"] = "phase1"
             st.rerun()
-            
+
     with col2:
         st.markdown("""
         <div class="workflow-card">
@@ -99,18 +103,6 @@ if st.session_state["current_page"] == "landing":
         """, unsafe_allow_html=True)
         if st.button("Launch Workflow II →", key="launch_2", use_container_width=True):
             st.session_state["current_page"] = "phase2"
-            st.rerun()
-            
-    with col3:
-        st.markdown("""
-        <div class="workflow-card">
-            <h3>Workflow III</h3>
-            <h4>Compliance Engine</h4>
-            <p>Auto-complete SIG/CAIQ vendor questionnaires in minutes.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Launch Workflow III →", key="launch_3", use_container_width=True):
-            st.session_state["current_page"] = "phase3"
             st.rerun()
 
 elif st.session_state["current_page"] == "phase1":
@@ -184,7 +176,7 @@ elif st.session_state["current_page"] == "phase1":
         with st.spinner("Generating data..."):
             try:
                 if st.session_state.get("demo_mode"):
-                    time.sleep(1) # simulate work
+                    time.sleep(15) # simulate work
                     with open("demo_data/phase1_sample_response.json") as f:
                         result = json.load(f)
                     df = pd.read_csv("demo_data/phase1_sample_data.csv")
@@ -280,7 +272,7 @@ elif st.session_state["current_page"] == "phase2":
         else:
             with st.spinner("Processing and vectorizing documents..."):
                 if st.session_state.get("demo_mode"):
-                    time.sleep(1)
+                    time.sleep(10)
                     session_id = "demo_session_abc"
                 else:
                     files = [("files", (f.name, f.getvalue(), f.type)) for f in uploaded_files]
@@ -297,7 +289,7 @@ elif st.session_state["current_page"] == "phase2":
     fin_job_id = st.text_input("Financial Data Job ID (from Phase 1)", value=st.session_state.get("last_job_id", ""))
     
     st.subheader("3. Configure Memo")
-    firm_name = st.text_input("Firm Name", "Acme Capital")
+    firm_name = st.text_input("Firm Name", "Meridian Growth Partners")
     memo_type = st.selectbox("Memo Type", ["both", "ic_memo", "exec_deck"])
     
     st.write("Sections to Include:")
@@ -308,8 +300,6 @@ elif st.session_state["current_page"] == "phase2":
     sec_deal = st.checkbox("Deal Structure", True)
     sec_risk = st.checkbox("Risk Mitigation", True)
     
-    confidence_thresh = st.slider("Confidence Threshold", 0.0, 1.0, 0.7)
-    
     if st.button("Generate Deliverables", type="primary", key="gen2"):
         if "session_id" not in st.session_state and not st.session_state.get("demo_mode"):
             st.warning("No session found. Please upload source documents or enter a session ID manually if supported.")
@@ -318,7 +308,7 @@ elif st.session_state["current_page"] == "phase2":
             
         with st.spinner("Generating Deliverables..."):
             if st.session_state.get("demo_mode"):
-                time.sleep(2)
+                time.sleep(15)
                 with open("demo_data/phase2_sample_response.json") as f:
                     status_data = json.load(f)
                 status = "completed"
@@ -337,8 +327,7 @@ elif st.session_state["current_page"] == "phase2":
                     "config": {
                         "memo_type": memo_type,
                         "firm_name": firm_name,
-                        "sections": sections,
-                        "confidence_threshold": confidence_thresh
+                        "sections": sections
                     }
                 }
                 
@@ -381,188 +370,330 @@ elif st.session_state["current_page"] == "phase2":
                         st.warning("Needs Review: Low confidence or missing data")
                     st.markdown(sec['content'])
                     
+            # --- Document Preview Viewers ---
+            VIEWER_CSS = """
+                <style>
+                    .viewer-wrap { position:relative; border:1px solid #444; border-radius:8px; overflow:hidden; background:#1e1e1e; }
+                    .viewer-bar { display:flex; align-items:center; padding:8px 16px; background:#2d2d2d; border-bottom:1px solid #444; }
+                    .viewer-bar span { color:#ccc; font-weight:600; font-size:14px; }
+                    .viewer-body { height:500px; overflow-y:auto; }
+
+                    /* Slide styles */
+                    .slide { background:linear-gradient(135deg,#0f1729,#1a2744); border:1px solid #334; border-radius:8px;
+                             padding:28px 36px; margin-bottom:16px; min-height:200px; position:relative; }
+                    .slide-num { position:absolute; top:10px; right:14px; color:#556; font-size:11px; font-weight:600; }
+                    .slide-title { color:#e8eaf6; font-size:20px; font-weight:700; margin:0 0 16px; letter-spacing:0.5px; text-transform:uppercase; border-bottom:2px solid #4CAF50; padding-bottom:8px; }
+                    .slide-subtitle { color:#b0bec5; font-size:15px; font-weight:600; margin:4px 0 12px; }
+                    .slide-body p { color:#cfd8dc; font-size:13px; line-height:1.7; margin:4px 0; }
+                    .slide-body li { color:#cfd8dc; font-size:13px; line-height:1.7; margin:2px 0; }
+                    .slide-body ul { padding-left:18px; margin:6px 0; }
+
+                    /* KPI row */
+                    .kpi-row { display:flex; gap:12px; flex-wrap:wrap; margin:12px 0 16px; }
+                    .kpi-card { background:#1b2a4a; border:1px solid #334; border-radius:6px; padding:12px 16px; text-align:center; flex:1; min-width:100px; }
+                    .kpi-value { color:#4CAF50; font-size:22px; font-weight:700; }
+                    .kpi-label { color:#90a4ae; font-size:11px; margin-top:2px; }
+
+                    /* Numbered items */
+                    .numbered-item { display:flex; gap:14px; margin:12px 0; }
+                    .num-badge { background:#4CAF50; color:#fff; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; flex-shrink:0; margin-top:2px; }
+                    .num-content h4 { color:#e0e0e0; font-size:14px; font-weight:600; margin:0 0 4px; }
+                    .num-content p { color:#b0bec5; font-size:12.5px; line-height:1.6; margin:0; }
+
+                    /* Two-column layout */
+                    .two-col { display:flex; gap:24px; margin-top:12px; }
+                    .two-col > div { flex:1; }
+                    .col-title { color:#b0bec5; font-size:14px; font-weight:600; margin-bottom:8px; border-bottom:1px solid #334; padding-bottom:4px; }
+
+                    /* Metric table */
+                    .metric-table { width:100%; border-collapse:collapse; margin:8px 0; }
+                    .metric-table td { padding:6px 10px; border-bottom:1px solid #263238; font-size:13px; }
+                    .metric-table td:first-child { color:#90a4ae; }
+                    .metric-table td:last-child { color:#e0e0e0; font-weight:600; text-align:right; }
+
+                    /* DOCX body */
+                    .docx-body { padding:28px 36px; background:#fafafa; color:#222; font-family:'Georgia',serif; font-size:14px; line-height:1.7; }
+                    .docx-body h1,.docx-body h2,.docx-body h3 { color:#1a237e; }
+                    .docx-body table { border-collapse:collapse; width:100%; margin:12px 0; }
+                    .docx-body td,.docx-body th { border:1px solid #ccc; padding:6px 10px; }
+                </style>
+            """
+
+            def render_docx_preview(file_path):
+                """Convert DOCX to HTML and render in a preview viewer."""
+                with open(file_path, "rb") as f:
+                    result = mammoth.convert_to_html(f)
+                    html_content = result.value
+                viewer_html = f"""
+                {VIEWER_CSS}
+                <div id="docx-viewer" class="viewer-wrap">
+                    <div class="viewer-bar">
+                        <span>IC Memo Preview</span>
+                    </div>
+                    <div class="viewer-body docx-body">{html_content}</div>
+                </div>
+                """
+                st.components.v1.html(viewer_html, height=560, scrolling=False)
+
+            def render_pptx_preview(file_path):
+                """Position-aware PPTX renderer with spatial layout."""
+                prs = Presentation(file_path)
+                sw = float(prs.slide_width or 12192000)
+
+                def emu_pct(val, ref):
+                    return round(float(val) / ref * 100, 1)
+
+                slides_html = []
+                for i, slide in enumerate(prs.slides):
+                    # Collect all text shapes with positions
+                    shapes_data = []
+                    for shape in slide.shapes:
+                        if not shape.has_text_frame and not shape.has_table:
+                            continue
+                        text = ""
+                        if shape.has_text_frame:
+                            text = "\n".join(p.text for p in shape.text_frame.paragraphs).strip()
+                        shapes_data.append({
+                            "text": text,
+                            "x": float(shape.left or 0),
+                            "y": float(shape.top or 0),
+                            "w": float(shape.width or 0),
+                            "h": float(shape.height or 0),
+                            "has_table": shape.has_table,
+                            "shape": shape,
+                        })
+
+                    if not shapes_data:
+                        slides_html.append(f'<div class="slide"><div class="slide-num">Slide {i+1}</div><p style="color:#556;text-align:center;padding-top:60px;"><em>Visual slide</em></p></div>')
+                        continue
+
+                    # Sort by Y then X
+                    shapes_data.sort(key=lambda s: (s["y"], s["x"]))
+
+                    # Group into rows (shapes within 10% Y of each other)
+                    rows = []
+                    current_row = [shapes_data[0]]
+                    for s in shapes_data[1:]:
+                        if abs(s["y"] - current_row[0]["y"]) < 200000:  # ~0.5cm tolerance
+                            current_row.append(s)
+                        else:
+                            rows.append(current_row)
+                            current_row = [s]
+                    rows.append(current_row)
+
+                    # Detect slide title (first row, single wide shape near top)
+                    slide_content = []
+                    title_text = ""
+                    for row_idx, row in enumerate(rows):
+                        texts_in_row = [s["text"] for s in row if s["text"]]
+                        if not texts_in_row:
+                            continue
+
+                        # Title detection: first row with text, near the top
+                        if row_idx == 0 and len(row) <= 2 and row[0]["y"] < 1000000:
+                            title_text = " — ".join(texts_in_row) if len(texts_in_row) > 1 else texts_in_row[0]
+                            continue
+
+                        # KPI row detection: 3+ items at same Y, short text
+                        if len(row) >= 3 and all(len(s["text"]) < 30 for s in row if s["text"]):
+                            # Check if alternating value/label pattern (paired rows)
+                            kpi_cards = []
+                            row.sort(key=lambda s: s["x"])
+                            for s in row:
+                                if s["text"]:
+                                    kpi_cards.append(s["text"])
+                            # Check next row for labels
+                            if row_idx + 1 < len(rows):
+                                next_row = rows[row_idx + 1]
+                                next_texts = sorted([(s["x"], s["text"]) for s in next_row if s["text"]], key=lambda t: t[0])
+                                if len(next_texts) == len(kpi_cards):
+                                    html = '<div class="kpi-row">'
+                                    for val, (_, label) in zip(kpi_cards, next_texts):
+                                        html += f'<div class="kpi-card"><div class="kpi-value">{val}</div><div class="kpi-label">{label}</div></div>'
+                                    html += '</div>'
+                                    slide_content.append(html)
+                                    rows[row_idx + 1] = []  # mark consumed
+                                    continue
+                            # Standalone KPI row
+                            html = '<div class="kpi-row">'
+                            for v in kpi_cards:
+                                html += f'<div class="kpi-card"><div class="kpi-value">{v}</div></div>'
+                            html += '</div>'
+                            slide_content.append(html)
+                            continue
+
+                        # KPI label row (already consumed)
+                        if not row:
+                            continue
+
+                        # Numbered item detection: first shape is a single digit
+                        if len(row) >= 2 and row[0]["text"].strip().isdigit() and len(row[0]["text"].strip()) == 1:
+                            num = row[0]["text"].strip()
+                            rest = row[1:]
+                            heading = rest[0]["text"] if rest else ""
+                            body = ""
+                            if len(rest) > 1:
+                                body = rest[1]["text"]
+                            # Check if next row is the body for this numbered item
+                            elif row_idx + 1 < len(rows):
+                                next_row = rows[row_idx + 1]
+                                next_texts = [s["text"] for s in next_row if s["text"]]
+                                if next_texts and not next_texts[0].strip().isdigit():
+                                    # Check it's indented similarly (body text)
+                                    if next_row[0]["x"] > 900000:
+                                        body = next_texts[0]
+                                        rows[row_idx + 1] = []
+                            html = f'<div class="numbered-item"><div class="num-badge">{num}</div><div class="num-content"><h4>{heading}</h4>'
+                            if body:
+                                # Split on sentence-like boundaries for bullet points
+                                parts = [p.strip() for p in body.replace("\u25a0", "\n").split("\n") if p.strip()]
+                                if len(parts) > 1:
+                                    html += "<ul>" + "".join(f"<li>{p}</li>" for p in parts) + "</ul>"
+                                else:
+                                    html += f"<p>{body}</p>"
+                            html += '</div></div>'
+                            slide_content.append(html)
+                            continue
+
+                        # Two-column detection: 2 shapes side by side with substantial width
+                        if len(row) == 2 and all(s["w"] > sw * 0.3 for s in row):
+                            row.sort(key=lambda s: s["x"])
+                            # Gather subsequent rows that belong to each column
+                            left_x = row[0]["x"]
+                            right_x = row[1]["x"]
+                            mid = (left_x + right_x) / 2
+                            left_items = [row[0]["text"]]
+                            right_items = [row[1]["text"]]
+                            # Look ahead for child rows
+                            for future_idx in range(row_idx + 1, min(row_idx + 8, len(rows))):
+                                fr = rows[future_idx]
+                                if not fr:
+                                    continue
+                                if len(fr) == 2 and abs(fr[0]["x"] - left_x) < 500000:
+                                    fr.sort(key=lambda s: s["x"])
+                                    left_items.append(fr[0]["text"])
+                                    right_items.append(fr[1]["text"])
+                                    rows[future_idx] = []
+                                else:
+                                    break
+                            html = '<div class="two-col"><div>'
+                            html += f'<div class="col-title">{left_items[0]}</div>'
+                            if len(left_items) > 1:
+                                html += '<table class="metric-table">'
+                                for item in left_items[1:]:
+                                    if item:
+                                        html += f'<tr><td colspan="2">{item}</td></tr>'
+                                html += '</table>'
+                            html += '</div><div>'
+                            html += f'<div class="col-title">{right_items[0]}</div>'
+                            if len(right_items) > 1:
+                                html += '<table class="metric-table">'
+                                for ri_idx, item in enumerate(right_items[1:]):
+                                    if item:
+                                        html += f'<tr><td colspan="2">{item}</td></tr>'
+                                html += '</table>'
+                            html += '</div></div>'
+                            slide_content.append(html)
+                            continue
+
+                        # Two paired shapes (label + value) side by side
+                        if len(row) == 2 and any(s["w"] < sw * 0.3 for s in row):
+                            row.sort(key=lambda s: s["x"])
+                            slide_content.append(f'<table class="metric-table"><tr><td>{row[0]["text"]}</td><td>{row[1]["text"]}</td></tr></table>')
+                            continue
+
+                        # Default: body text
+                        for s in row:
+                            if not s["text"]:
+                                continue
+                            if s.get("has_table"):
+                                table = s["shape"].table
+                                tbl = '<table class="metric-table">'
+                                for r_idx, trow in enumerate(table.rows):
+                                    tbl += '<tr>'
+                                    for cell in trow.cells:
+                                        tbl += f'<td>{cell.text}</td>'
+                                    tbl += '</tr>'
+                                tbl += '</table>'
+                                slide_content.append(tbl)
+                            else:
+                                lines = s["text"].split("\n")
+                                for line in lines:
+                                    line = line.strip()
+                                    if not line:
+                                        continue
+                                    # Bullet-like lines
+                                    if line.startswith(("•", "-", "▪", "●")):
+                                        slide_content.append(f'<div class="slide-body"><ul><li>{line.lstrip("•-▪● ")}</li></ul></div>')
+                                    else:
+                                        slide_content.append(f'<div class="slide-body"><p>{line}</p></div>')
+
+                    title_html = f'<div class="slide-title">{title_text}</div>' if title_text else ""
+                    # For slide 1 (cover), center everything
+                    if i == 0:
+                        inner = "".join(slide_content)
+                        slides_html.append(f'''<div class="slide" style="text-align:center;display:flex;flex-direction:column;justify-content:center;min-height:260px;">
+                            <div class="slide-num">Slide {i+1}</div>
+                            {title_html}
+                            {inner}
+                        </div>''')
+                    else:
+                        inner = "".join(slide_content)
+                        slides_html.append(f'''<div class="slide">
+                            <div class="slide-num">Slide {i+1}</div>
+                            {title_html}
+                            {inner}
+                        </div>''')
+
+                all_slides = "\n".join(slides_html)
+                viewer_html = f"""
+                {VIEWER_CSS}
+                <div id="pptx-viewer" class="viewer-wrap">
+                    <div class="viewer-bar">
+                        <span>Exec Deck Preview</span>
+                    </div>
+                    <div class="viewer-body" style="padding:16px 20px; background:#0a0e1a;">
+                        {all_slides}
+                    </div>
+                </div>
+                """
+                st.components.v1.html(viewer_html, height=560, scrolling=False)
+
             urls = status_data.get("download_urls", {})
-            if urls:
-                col_dl1, col_dl2, col_dl3 = st.columns(3)
-                if st.session_state.get("demo_mode"):
-                    try:
-                        with open("demo_data/phase2_sample_memo.docx", "rb") as f:
-                            col_dl1.download_button("Download DOCX", f, file_name="memo.docx")
-                        with open("demo_data/phase2_sample_deck.pptx", "rb") as f:
-                            col_dl2.download_button("Download PPTX", f, file_name="deck.pptx")
-                    except:
-                        pass
-                else:
-                    host = "http://backend:8000"
-                    if urls.get('docx'):
-                        col_dl1.markdown(f"**[Download DOCX]({host}{urls['docx']})**")
-                    if urls.get('pptx'):
-                        col_dl2.markdown(f"**[Download PPTX]({host}{urls['pptx']})**")
-                    if urls.get('audit_trail'):
-                        col_dl3.markdown(f"**[Download Audit Trail JSON]({host}{urls['audit_trail']})**")
+
+            # Show document previews
+            if st.session_state.get("demo_mode"):
+                docx_path = "demo_data/phase2_sample_memo.docx"
+                pptx_path = "demo_data/phase2_sample_deck.pptx"
+            else:
+                docx_path = None
+                pptx_path = None
+
+            tab_memo, tab_deck = st.tabs(["IC Memo (DOCX)", "Exec Deck (PPTX)"])
+
+            with tab_memo:
+                if docx_path and os.path.exists(docx_path):
+                    render_docx_preview(docx_path)
+                    with open(docx_path, "rb") as f:
+                        st.download_button("Download DOCX", f.read(), file_name="memo.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", use_container_width=True)
+                elif urls and urls.get("docx"):
+                    host = BACKEND_HOST
+                    st.markdown(f"**[Download DOCX]({host}{urls['docx']})**")
+
+            with tab_deck:
+                if pptx_path and os.path.exists(pptx_path):
+                    render_pptx_preview(pptx_path)
+                    with open(pptx_path, "rb") as f:
+                        st.download_button("Download PPTX", f.read(), file_name="deck.pptx", mime="application/vnd.openxmlformats-officedocument.presentationml.presentation", use_container_width=True)
+                elif urls and urls.get("pptx"):
+                    host = BACKEND_HOST
+                    st.markdown(f"**[Download PPTX]({host}{urls['pptx']})**")
+
+            # Audit trail download separately
+            if urls and urls.get("audit_trail"):
+                if not st.session_state.get("demo_mode"):
+                    host = BACKEND_HOST
+                    st.markdown(f"**[Download Audit Trail JSON]({host}{urls['audit_trail']})**")
         elif status == "failed":
             st.error("Job failed")
 
-elif st.session_state["current_page"] == "phase3":
-    st.header("Phase 3: InfoSec & Vendor Risk Automation Pipeline")
-
-    col_upload_1, col_upload_2 = st.columns(2)
-    with col_upload_1:
-        st.subheader("1. Upload Knowledge Base")
-        st.write("Upload SOC 2 reports, pentest summaries, security policies.")
-        kb_files = st.file_uploader("Upload KB Docs", accept_multiple_files=True, key="kb_up")
-        if st.button("Index to KB", key="kb_idx"):
-            if not kb_files and not st.session_state.get("demo_mode"):
-                st.warning("Please upload at least one file.")
-            else:
-                with st.spinner("Indexing to persistent ChromaDB..."):
-                    if st.session_state.get("demo_mode"):
-                        time.sleep(1)
-                        st.success("Indexed to KB successfully.")
-                    else:
-                        files = [("files", (f.name, f.getvalue(), f.type)) for f in kb_files]
-                        resp = requests.post(f"{API_V3_URL}/upload-kb", files=files)
-                        if resp.ok:
-                            st.success(resp.json().get("message", "Success"))
-                        else:
-                            st.error(f"Error: {resp.status_code}")
-
-    with col_upload_2:
-        st.subheader("2. Upload Questionnaire")
-        st.write("Upload inbound vendor questionnaire (CSV, DOCX, PDF, JSON). No XLSX.")
-        q_file = st.file_uploader("Upload Questionnaire", accept_multiple_files=False, key="q_up")
-        if st.button("Parse Questionnaire", key="q_parse"):
-            if not q_file and not st.session_state.get("demo_mode"):
-                st.warning("Please upload a file.")
-            elif q_file and q_file.name.endswith(".xlsx"):
-                st.error("XLSX files are strictly forbidden (DMZ rule).")
-            else:
-                with st.spinner("Parsing format and framework..."):
-                    if st.session_state.get("demo_mode"):
-                        time.sleep(1)
-                        st.session_state["q_session_id"] = "demo_q_123"
-                        st.success("Parsed 20 questions (Framework: SIG Lite)")
-                    else:
-                        files = {"file": (q_file.name, q_file.getvalue(), q_file.type)}
-                        resp = requests.post(f"{API_V3_URL}/upload-questionnaire", files=files)
-                        if resp.ok:
-                            data = resp.json()
-                            st.session_state["q_session_id"] = data["questionnaire_session_id"]
-                            st.success(f"Parsed {data['total_questions']} questions (Framework: {data['framework']})")
-                            if data['domains']:
-                                st.write(f"Detected Domains: {', '.join(data['domains'][:5])}...")
-                        else:
-                            st.error(f"Error: {resp.text}")
-
-    st.subheader("3. Configure & Generate")
-    c_col1, c_col2, c_col3, c_col4 = st.columns(4)
-    with c_col1:
-        comp_name = st.text_input("Company Name", "Tracelight")
-    with c_col2:
-        tone = st.selectbox("Tone", ["formal", "concise", "technical"], index=0)
-    with c_col3:
-        conf_thresh = st.slider("Review Threshold", 0.0, 1.0, 0.8)
-    with c_col4:
-        auto_thresh = st.slider("Auto-Approve Threshold", 0.0, 1.0, 0.9)
-
-    if st.button("Generate Responses", type="primary", key="gen3"):
-        if "q_session_id" not in st.session_state and not st.session_state.get("demo_mode"):
-            st.warning("Please upload and parse a questionnaire first.")
-        else:
-            with st.spinner("Generating..."):
-                if st.session_state.get("demo_mode"):
-                    time.sleep(1)
-                    st.session_state["comp_job_id"] = "demo_job_789"
-                else:
-                    payload = {
-                        "kb_session_id": "persistent",
-                        "questionnaire_session_id": st.session_state["q_session_id"],
-                        "config": {
-                            "company_name": comp_name,
-                            "default_tone": tone,
-                            "confidence_threshold": conf_thresh,
-                            "auto_approve_above": auto_thresh
-                        }
-                    }
-                    try:
-                        resp = requests.post(f"{API_V3_URL}/generate", json=payload)
-                        if not resp.ok:
-                            st.error(f"Error: {resp.text}")
-                        else:
-                            job_id = resp.json()["job_id"]
-                            st.session_state["comp_job_id"] = job_id
-                            st.info(f"Compliance job started! ID: {job_id}")
-                    except Exception as e:
-                        st.error(f"Exception: {e}")
-
-    if "comp_job_id" in st.session_state:
-        if st.session_state.get("demo_mode"):
-            with open("demo_data/phase3_sample_response.json") as f:
-                data = json.load(f)
-            status_ok = True
-        else:
-            job_id = st.session_state["comp_job_id"]
-            status_resp = requests.get(f"{API_V3_URL}/status/{job_id}")
-            status_ok = status_resp.ok
-            if status_ok:
-                data = status_resp.json()
-        
-        if status_ok:
-            st.write(f"**Status:** {data['status'].capitalize()}")
-            
-            if data['status'] == 'completed':
-                st.subheader("4. Review Dashboard")
-                m_col1, m_col2, m_col3 = st.columns(3)
-                m_col1.metric("Total Questions", data['total_questions'])
-                m_col2.metric("Auto-Approved", data['auto_approved'], delta_color="normal")
-                m_col3.metric("Needs Review", data['needs_review'], delta_color="inverse")
-                
-                responses = data.get("responses", [])
-                
-                filter_choice = st.radio("Filter", ["Show all", "Needs review only", "Auto-approved only"], horizontal=True)
-                
-                if responses:
-                    for r in responses:
-                        if filter_choice == "Needs review only" and r['status'] == "auto_approved": continue
-                        if filter_choice == "Auto-approved only" and r['status'] != "auto_approved": continue
-                        
-                        badge_color = "🟢" if r['status'] == "auto_approved" else "🟠"
-                        with st.expander(f"{badge_color} [{r['status']}] {r['question_id']} (Conf: {r['confidence']}) - {r['question_text'][:60]}..."):
-                            st.write(f"**Question:** {r['question_text']}")
-                            st.write(f"**Domain:** {r['domain']} | **Type:** {r['response_type']}")
-                            
-                            new_text = st.text_area("Drafted Response", r.get('response_text', ''), key=f"text_{r['question_id']}")
-                            new_bool = r.get('boolean_value')
-                            if r.get('response_type') == "boolean":
-                                new_bool = st.radio("Boolean Answer", [True, False, None], index=[True, False, None].index(r.get('boolean_value')) if r.get('boolean_value') in [True, False, None] else 2, key=f"bool_{r['question_id']}")
-                                
-                            notes = st.text_input("Reviewer Notes", r.get('reviewer_notes', ''), key=f"notes_{r['question_id']}")
-                            
-                            c1, c2 = st.columns(2)
-                            if c1.button("Approve", key=f"app_{r['question_id']}"):
-                                st.success("Approved!")
-                                
-                            if c2.button("Override", key=f"over_{r['question_id']}"):
-                                st.warning("Overridden!")
-                                
-                st.subheader("5. Export")
-                if st.session_state.get("demo_mode"):
-                    dl_c1, dl_c2, dl_c3 = st.columns(3)
-                    try:
-                        with open("demo_data/phase3_sample_questionnaire.csv", "rb") as f:
-                            dl_c1.download_button("Download CSV", f, file_name="questionnaire.csv")
-                        with open("demo_data/phase3_sample_completed.docx", "rb") as f:
-                            dl_c2.download_button("Download DOCX", f, file_name="completed.docx")
-                    except:
-                        pass
-                else:
-                    urls = data.get("download_urls", {})
-                    host = "http://backend:8000"
-                    if urls:
-                        dl_c1, dl_c2, dl_c3 = st.columns(3)
-                        if urls.get("csv"):
-                            dl_c1.markdown(f"**[Download CSV]({host}{urls['csv']})**")
-                        if urls.get("docx"):
-                            dl_c2.markdown(f"**[Download DOCX]({host}{urls['docx']})**")
-                        if urls.get("json"):
-                            dl_c3.markdown(f"**[Download JSON]({host}{urls['json']})**")

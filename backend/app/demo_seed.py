@@ -1,125 +1,117 @@
+"""
+Demo data seed script.
+
+NOTE: phase2_sample_response.json, phase2_sample_memo.docx, and phase2_sample_deck.pptx
+are hand-crafted NovaCrest demo assets. This script only regenerates Phase 1 fixtures.
+Run from project root: python -m app.demo_seed
+"""
 import os
 import json
+import numpy as np
 import pandas as pd
-from docx import Document
-from pptx import Presentation
 
 DEMO_DIR = "frontend/demo_data"
 os.makedirs(DEMO_DIR, exist_ok=True)
 
-# Phase 1: Synthetic Data
+# Phase 1: Synthetic Data — NovaCrest financial scenario
+# 50 entities (comparable SaaS companies) × 20 quarters × 5 variables
+np.random.seed(42)
+
+n_entities = 50
+n_quarters = 20
+quarters = [f"Q{(q % 4) + 1}-{2021 + q // 4}" for q in range(n_quarters)]
+
+rows = []
+for entity_id in range(1, n_entities + 1):
+    base_rev = np.random.uniform(5, 40)  # $M ARR
+    growth_rate = np.random.uniform(0.03, 0.12)  # quarterly growth
+    base_margin = np.random.uniform(0.65, 0.85)
+    base_nrr = np.random.uniform(1.05, 1.50)
+    base_cac = np.random.uniform(8, 20)  # months
+
+    for q in range(n_quarters):
+        rev = base_rev * (1 + growth_rate) ** q + np.random.normal(0, base_rev * 0.03)
+        margin = base_margin + np.random.normal(0, 0.02)
+        nrr = base_nrr + np.random.normal(0, 0.03)
+        cac = base_cac + np.random.normal(0, 1.5)
+        rule40 = (growth_rate * 4 * 100) + (margin * 100 - 100) + np.random.normal(0, 3)
+
+        rows.append({
+            "entity_id": entity_id,
+            "quarter": quarters[q],
+            "ARR_M": round(max(rev, 0.5), 2),
+            "Gross_Margin": round(np.clip(margin, 0.4, 0.95), 4),
+            "Net_Retention_Rate": round(np.clip(nrr, 0.8, 1.8), 4),
+            "CAC_Payback_Months": round(max(cac, 2), 1),
+            "Rule_of_40": round(rule40, 1),
+        })
+
+df = pd.DataFrame(rows)
+df.to_csv(f"{DEMO_DIR}/phase1_sample_data.csv", index=False)
+
 with open(f"{DEMO_DIR}/phase1_sample_response.json", "w") as f:
     json.dump({
         "job_id": "demo_job_123",
-        "scenario": {"natural_language": "Demo Scenario", "use_llm_profiler": False},
+        "scenario": {
+            "natural_language": "Growth-stage B2B SaaS, financial data infrastructure vertical, high NRR, land-and-expand model",
+            "use_llm_profiler": True
+        },
         "privacy": {"enabled": True, "epsilon": 1.0},
         "output_format": "csv",
         "profile_used": {
-            "name": "Demo Profile",
+            "name": "B2B SaaS Growth Equity",
+            "asset_class": "growth_equity",
+            "num_entities": n_entities,
+            "time_horizon_years": 5,
+            "frequency": "quarterly",
             "variables": {
-                "Revenue": {"type": "continuous"},
-                "EBITDA": {"type": "continuous"}
+                "ARR_M": {
+                    "distribution": "lognormal",
+                    "mean": 18.5,
+                    "std": 8.2,
+                    "type": "continuous"
+                },
+                "Gross_Margin": {
+                    "distribution": "beta",
+                    "mean": 0.78,
+                    "std": 0.05,
+                    "type": "continuous"
+                },
+                "Net_Retention_Rate": {
+                    "distribution": "normal",
+                    "mean": 1.25,
+                    "std": 0.12,
+                    "type": "continuous"
+                },
+                "CAC_Payback_Months": {
+                    "distribution": "lognormal",
+                    "mean": 14,
+                    "std": 3.5,
+                    "type": "continuous"
+                },
+                "Rule_of_40": {
+                    "distribution": "normal",
+                    "mean": 42,
+                    "std": 12,
+                    "type": "continuous"
+                }
             }
         },
         "validation_report": {
-            "row_count": 1000,
-            "correlation_rmse": 0.05,
+            "row_count": len(df),
+            "correlation_rmse": 0.042,
             "dp_applied": True,
             "dp_epsilon": 1.0,
             "post_dp_ks_all_passed": True,
             "ks_tests": {
-                "Revenue": {"statistic": 0.02, "p_value": 0.99, "passed": True},
-                "EBITDA": {"statistic": 0.03, "p_value": 0.95, "passed": True}
+                "ARR_M": {"statistic": 0.018, "p_value": 0.97, "passed": True},
+                "Gross_Margin": {"statistic": 0.024, "p_value": 0.93, "passed": True},
+                "Net_Retention_Rate": {"statistic": 0.021, "p_value": 0.95, "passed": True},
+                "CAC_Payback_Months": {"statistic": 0.029, "p_value": 0.91, "passed": True},
+                "Rule_of_40": {"statistic": 0.015, "p_value": 0.98, "passed": True}
             }
         }
     }, f, indent=2)
 
-df = pd.DataFrame({
-    "Revenue": [100, 110, 120, 130, 140],
-    "EBITDA": [20, 22, 24, 26, 28]
-})
-df.to_csv(f"{DEMO_DIR}/phase1_sample_data.csv", index=False)
-
-# Phase 2: Deliverable Engine
-with open(f"{DEMO_DIR}/phase2_sample_response.json", "w") as f:
-    json.dump({
-        "job_id": "demo_memo_job_456",
-        "status": "completed",
-        "sections": [
-            {"title": "Executive Summary", "content": "This is a demo executive summary.", "confidence": 0.95, "needs_review": False},
-            {"title": "Investment Thesis", "content": "This is a demo investment thesis.", "confidence": 0.85, "needs_review": False},
-            {"title": "Market Analysis", "content": "This is a demo market analysis.", "confidence": 0.45, "needs_review": True},
-            {"title": "Financial Projections", "content": "This is a demo financial projection.", "confidence": 0.92, "needs_review": False},
-            {"title": "Deal Structure", "content": "This is a demo deal structure.", "confidence": 0.88, "needs_review": False},
-            {"title": "Risk Mitigation", "content": "This is a demo risk mitigation.", "confidence": 0.75, "needs_review": False}
-        ],
-        "download_urls": {
-            "docx": "/demo_data/phase2_sample_memo.docx",
-            "pptx": "/demo_data/phase2_sample_deck.pptx",
-            "audit_trail": "/demo_data/audit_trail.json"
-        }
-    }, f, indent=2)
-
-doc = Document()
-doc.add_heading("Demo IC Memo", 0)
-doc.add_paragraph("This is a generated IC Memo for the demo.")
-doc.save(f"{DEMO_DIR}/phase2_sample_memo.docx")
-
-prs = Presentation()
-title_slide_layout = prs.slide_layouts[0]
-slide = prs.slides.add_slide(title_slide_layout)
-title = slide.shapes.title
-subtitle = slide.placeholders[1]
-title.text = "Demo Exec Deck"
-subtitle.text = "Generated by Tracelight"
-prs.save(f"{DEMO_DIR}/phase2_sample_deck.pptx")
-
-# Phase 3: Compliance Engine
-with open(f"{DEMO_DIR}/phase3_sample_response.json", "w") as f:
-    json.dump({
-        "job_id": "demo_comp_job_789",
-        "status": "completed",
-        "total_questions": 20,
-        "auto_approved": 15,
-        "needs_review": 5,
-        "responses": [
-            {
-                "question_id": "Q1",
-                "question_text": "Do you encrypt data at rest?",
-                "domain": "Data Security",
-                "response_type": "boolean",
-                "status": "auto_approved",
-                "confidence": 0.95,
-                "boolean_value": True,
-                "response_text": "Yes, we use AES-256 encryption."
-            },
-            {
-                "question_id": "Q2",
-                "question_text": "Describe your incident response plan.",
-                "domain": "Incident Management",
-                "response_type": "text",
-                "status": "needs_review",
-                "confidence": 0.65,
-                "boolean_value": None,
-                "response_text": "We have a 24/7 SOC."
-            }
-        ],
-        "download_urls": {
-            "csv": "/demo_data/phase3_sample_questionnaire.csv",
-            "docx": "/demo_data/phase3_sample_completed.docx",
-            "json": "/demo_data/phase3_sample_completed.json"
-        }
-    }, f, indent=2)
-
-pd.DataFrame({
-    "Question ID": ["Q1", "Q2"],
-    "Question": ["Do you encrypt data at rest?", "Describe your incident response plan."],
-    "Domain": ["Data Security", "Incident Management"]
-}).to_csv(f"{DEMO_DIR}/phase3_sample_questionnaire.csv", index=False)
-
-doc3 = Document()
-doc3.add_heading("Completed Security Questionnaire", 0)
-doc3.add_paragraph("Demo response to security questionnaire.")
-doc3.save(f"{DEMO_DIR}/phase3_sample_completed.docx")
-
-print("Demo fixtures created.")
+print(f"Phase 1 fixtures created: {len(df)} rows ({n_entities} entities × {n_quarters} quarters × 5 variables)")
+print("Phase 2 fixtures are hand-crafted — not overwritten.")

@@ -2,3 +2,5 @@ streamlit>=1.38
 plotly>=5.22
 requests>=2.31
 pandas>=2.2
+mammoth>=1.8
+python-pptx>=1.0

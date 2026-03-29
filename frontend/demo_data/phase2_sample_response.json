@@ -5,80 +5,81 @@
     {
       "section_id": "executive_summary",
       "title": "Executive Summary",
-      "content": "**Recommendation: Proceed with acquisition.**\n\nAcme Capital should acquire TargetCo at an implied enterprise value of $485M (7.2x LTM EBITDA) [model_export:ebitda_margin:mean]. The target operates in a structurally attractive sub-segment of European industrials with demonstrated pricing power and a 23% EBITDA margin [model_export:ebitda_margin:p50].\n\nThe base case IRR of 22.4% [model_export:revenue:mean] is supported by three core value drivers: (1) margin expansion from operational improvements, (2) bolt-on M&A in fragmented adjacent markets, and (3) working capital optimization.\n\n**Key risks**: Cyclical revenue exposure mitigated by diversified end-market mix [cim_report.pdf:page_8], and integration complexity addressed through a dedicated 100-day plan [management_deck.pdf:page_14].",
+      "content": "**Recommendation: Proceed with $85M growth equity investment for 30% minority stake.**\n\nMeridian Growth Partners should invest in NovaCrest Analytics at a pre-money valuation of $283M. NovaCrest is a founder-led B2B SaaS provider of financial data infrastructure, serving banks, asset managers, and insurance companies [NovaCrest_CIM_2026:Executive_Summary].\n\nThe Company has scaled ARR from $8M (2023) to $31M (2025), representing 72% YoY growth with 78% gross margins and a 135% Net Retention Rate [NovaCrest_CIM_2026:Financial_Performance]. The Rule of 40 score of 54 places NovaCrest firmly in elite territory for growth-stage SaaS.\n\nProceeds will fund European expansion ($34M), product development ($30M), and headcount growth from 120 to 200 ($21M) [NovaCrest_CIM_2026:Use_of_Proceeds]. Three letters of intent from tier-one European asset managers validate the expansion opportunity, contingent on localized support and SOC 2 Type II certification [Mgmt_Presentation_Transcript:Marcus_Vance].\n\n**Key risks**: Customer concentration (top 3 = 40% of ARR), onboarding timelines averaging 4 months [Expert_Call_DataInfra_Specialist:Dr_Chen], and post-Series A support degradation flagged by a churned customer [Expert_Call_Former_Customer:James_Park].",
       "citations": [
-        "model_export:ebitda_margin:mean",
-        "model_export:ebitda_margin:p50",
-        "model_export:revenue:mean",
-        "cim_report.pdf:page_8",
-        "management_deck.pdf:page_14"
+        "NovaCrest_CIM_2026:Executive_Summary",
+        "NovaCrest_CIM_2026:Financial_Performance",
+        "NovaCrest_CIM_2026:Use_of_Proceeds",
+        "Mgmt_Presentation_Transcript:Marcus_Vance",
+        "Expert_Call_DataInfra_Specialist:Dr_Chen",
+        "Expert_Call_Former_Customer:James_Park"
       ],
-      "confidence": 0.92,
+      "confidence": 0.93,
       "needs_review": false
     },
     {
       "section_id": "investment_thesis",
       "title": "Investment Thesis",
-      "content": "The investment thesis rests on three pillars:\n\n**1. Margin Expansion (500bps over 5 years)**\nTargetCo currently operates at a 23% EBITDA margin [model_export:ebitda_margin:p50] versus best-in-class peers at 28%. Management has identified $12M of run-rate cost savings through procurement consolidation and plant rationalization [management_deck.pdf:page_22].\n\n**2. Inorganic Growth via Bolt-On M&A**\nThe European industrials sub-segment remains highly fragmented with 200+ sub-scale operators [cim_report.pdf:page_15]. TargetCo has a demonstrated track record of 4 successful acquisitions over 2019-2024 [cim_report.pdf:page_18].\n\n**3. Working Capital Optimization**\nCurrent DSO of 68 days [model_export:leverage_ratio:mean] significantly exceeds the industry benchmark of 45 days. Implementing structured receivables management is expected to release $18M of trapped cash within 18 months.",
+      "content": "The investment thesis rests on three pillars:\n\n**1. Category-Defining Product in a $34B TAM**\nFinancial institutions face a dual mandate to modernize legacy tech stacks for AI readiness while complying with increasingly stringent regulations (T+1 settlement, DORA, MiFID II) [NovaCrest_CIM_2026:Market_Opportunity]. NovaCrest occupies a strategic gap between rigid legacy providers (Moody's, Regnology) and empty-warehouse platforms (Snowflake), offering both flexibility and out-of-the-box financial intelligence [Expert_Call_DataInfra_Specialist:Dr_Chen].\n\n**2. European Expansion as a $40M Revenue Catalyst**\nEuropean banks face acute regulatory pressure from DORA and are legally prohibited from using non-EU data hosting for certain client data [Expert_Call_DataInfra_Specialist:Dr_Chen]. NovaCrest's plan to establish localized EU data centers and a London HQ positions it to capture this demand. Management projects $40M in incremental European revenue over three years [Mgmt_Presentation_Transcript:Marcus_Vance]. Three existing LOIs from tier-one European asset managers de-risk this bet.\n\n**3. Elite Unit Economics with Proven Land-and-Expand**\nClients land with DataBridge at $180K ACV, then expand to RiskLens and ComplianceSync, driving ACVs to $500K+ within 12-18 months [NovaCrest_CIM_2026:Go_to_Market]. This expansion dynamic sustains the 135% NRR. Customer reference Avalon Asset Management confirmed 70% reduction in data reconciliation time and $2M/year in cost savings [Customer_Reference_Avalon_AM:Lisa_Torres].",
       "citations": [
-        "model_export:ebitda_margin:p50",
-        "management_deck.pdf:page_22",
-        "cim_report.pdf:page_15",
-        "cim_report.pdf:page_18",
-        "model_export:leverage_ratio:mean"
+        "NovaCrest_CIM_2026:Market_Opportunity",
+        "Expert_Call_DataInfra_Specialist:Dr_Chen",
+        "Mgmt_Presentation_Transcript:Marcus_Vance",
+        "NovaCrest_CIM_2026:Go_to_Market",
+        "Customer_Reference_Avalon_AM:Lisa_Torres"
       ],
-      "confidence": 0.88,
+      "confidence": 0.91,
       "needs_review": false
     },
     {
       "section_id": "market_analysis",
       "title": "Market Analysis",
-      "content": "The European mid-market industrials sector is projected to grow at a 4.2% CAGR through 2030 [cim_report.pdf:page_6], driven by reshoring trends and infrastructure investment.\n\nTargetCo holds a #3 market position with 8% share in its core segment [cim_report.pdf:page_9]. The competitive landscape is characterized by rational pricing behavior \u2014 the top 5 players collectively hold 35% share, with limited history of destructive price competition.\n\n**Regulatory tailwinds**: EU Green Deal mandates are driving accelerated replacement cycles in TargetCo's core product categories [INSUFFICIENT DATA \u2014 REQUIRES ANALYST INPUT].\n\n**Customer concentration**: Top 10 customers represent 42% of revenue [cim_report.pdf:page_11], a moderate level for the sector.",
+      "content": "**Market Size & Growth**\nThe global TAM for financial data management software is $34B, with a SAM of $12B in North America and Western Europe [NovaCrest_CIM_2026:Market_Opportunity]. Growth is driven by regulatory tailwinds (DORA, T+1 settlement) and the institutional push to modernize data infrastructure for AI/ML adoption.\n\n**Competitive Landscape**\nThe market remains surprisingly fragmented:\n- **Legacy providers** (Moody's Analytics, Regnology): Robust compliance tools but rigid architectures requiring months of professional services [NovaCrest_CIM_2026:Market_Opportunity]\n- **Horizontal cloud platforms** (Snowflake Financial Services): Powerful raw compute but require expensive internal teams to build financial data models [NovaCrest_CIM_2026:Market_Opportunity]\n- **Bloomberg B-PIPE expansion**: Walled-garden approach; works well within Bloomberg ecosystem but creates massive friction with proprietary or alternative data sources [Mgmt_Presentation_Transcript:Marcus_Vance]\n\nDr. Sarah Chen, former CDO at EuroBank Corp, validated NovaCrest's positioning: \"NovaCrest provides the flexibility and speed of a modern cloud stack with the out-of-the-box financial intelligence of a legacy provider\" [Expert_Call_DataInfra_Specialist:Dr_Chen].\n\n**Regulatory Tailwinds**\nEuropean banks face DORA compliance deadlines and MiFID II updates that make manual data reconciliation untenable. Dr. Chen assessed European expansion as \"extremely viable\" given these regulatory drivers [Expert_Call_DataInfra_Specialist:Dr_Chen]. [INSUFFICIENT DATA \u2014 REQUIRES ANALYST INPUT on specific DORA compliance timeline and enforcement penalties].",
       "citations": [
-        "cim_report.pdf:page_6",
-        "cim_report.pdf:page_9",
-        "cim_report.pdf:page_11"
+        "NovaCrest_CIM_2026:Market_Opportunity",
+        "Mgmt_Presentation_Transcript:Marcus_Vance",
+        "Expert_Call_DataInfra_Specialist:Dr_Chen"
       ],
-      "confidence": 0.71,
+      "confidence": 0.72,
       "needs_review": true
     },
     {
       "section_id": "financial_projections",
       "title": "Financial Projections",
-      "content": "**Base Case (60% probability)**\n- Revenue CAGR: 6.8% [model_export:revenue:mean]\n- Exit EBITDA margin: 28% (from 23% at entry) [model_export:ebitda_margin:mean]\n- Entry multiple: 7.2x | Exit multiple: 7.5x\n- Gross IRR: 22.4% | Gross MOIC: 2.8x\n\n**Downside Case (25% probability)**\n- Revenue CAGR: 3.1% [model_export:revenue:p10]\n- Exit EBITDA margin: 24%\n- Entry multiple: 7.2x | Exit multiple: 6.5x\n- Gross IRR: 12.8% | Gross MOIC: 1.8x\n\n**Upside Case (15% probability)**\n- Revenue CAGR: 9.2% [model_export:revenue:p90]\n- Exit EBITDA margin: 31%\n- Gross IRR: 31.2% | Gross MOIC: 3.6x\n\nSensitivity analysis confirms that the investment returns >15% IRR in 85% of scenarios [model_export:capex_pct_revenue:mean].",
+      "content": "**Historical Performance**\n| Metric | 2023 | 2024 | 2025 |\n|--------|------|------|------|\n| ARR | $8.0M | $18.0M | $31.0M |\n| YoY Growth | \u2014 | 125% | 72% |\n| Gross Margin | 78% | 78% | 78% |\n\n[NovaCrest_CIM_2026:Financial_Performance]\n\n**Key Unit Economics**\n- Net Retention Rate: 135% [NovaCrest_CIM_2026:Financial_Performance]\n- CAC Payback: 14 months [NovaCrest_CIM_2026:Financial_Performance]\n- Rule of 40: 54 (72% growth + -18% FCF margin due to reinvestment) [NovaCrest_CIM_2026:Executive_Summary]\n- Average landing ACV: $180K, expanding to $500K+ [NovaCrest_CIM_2026:Go_to_Market]\n\n**Path to $100M ARR**\nManagement outlined a credible path anchored on three vectors [Mgmt_Presentation_Transcript:Marcus_Vance]:\n1. Organic expansion of existing NA customers via RiskLens and ComplianceSync modules\n2. European market entry ($40M incremental revenue over 3 years), backed by 3 LOIs\n3. New AI-native predictive analytics product line (portion of $30M product development budget)\n\n**Valuation Context**\n- Pre-money: $283M at $31M ARR = ~9.1x ARR multiple\n- For a company growing 72% YoY with 78% gross margins and 135% NRR, this represents a reasonable entry point relative to public SaaS comps trading at 10-15x ARR for similar growth profiles.",
       "citations": [
-        "model_export:revenue:mean",
-        "model_export:ebitda_margin:mean",
-        "model_export:revenue:p10",
-        "model_export:revenue:p90",
-        "model_export:capex_pct_revenue:mean"
+        "NovaCrest_CIM_2026:Financial_Performance",
+        "NovaCrest_CIM_2026:Executive_Summary",
+        "NovaCrest_CIM_2026:Go_to_Market",
+        "Mgmt_Presentation_Transcript:Marcus_Vance"
       ],
-      "confidence": 0.95,
+      "confidence": 0.96,
       "needs_review": false
     },
     {
       "section_id": "deal_structure",
       "title": "Deal Structure",
-      "content": "**Transaction Overview**\n- Enterprise Value: $485M (7.2x LTM EBITDA)\n- Equity Contribution: $195M (40%)\n- Senior Debt: $242M (4.0x leverage) [model_export:leverage_ratio:mean]\n- Mezzanine: $48M (0.8x)\n- Total Leverage: 4.8x [model_export:interest_rate:mean]\n\n**Debt Terms**\n- Senior: SOFR + 450bps, 7-year tenor, 1% annual amortization\n- Mezzanine: 12% cash / 2% PIK, bullet maturity at Year 6\n- Estimated blended cost of debt: 8.2% [model_export:interest_rate:median]\n\n**Key Covenants**: Total leverage \u22646.0x, interest coverage \u22652.0x, minimum liquidity $15M.",
+      "content": "**Transaction Overview**\n- Investment: $85M for 30% minority stake\n- Pre-money valuation: $283M\n- Post-money valuation: $368M\n- Deal type: Growth equity (not LBO \u2014 Company is profitable)\n- Structure: Preferred equity with standard minority protections\n\n[NovaCrest_CIM_2026:Executive_Summary]\n\n**Use of Proceeds**\n- 40% ($34M): European expansion \u2014 London HQ, EU data centers, local GTM team, European compliance officers [NovaCrest_CIM_2026:Use_of_Proceeds]\n- 35% ($30M): Product development \u2014 AI-native predictive analytics suite, 100 new DataBridge integrations [NovaCrest_CIM_2026:Use_of_Proceeds]\n- 25% ($21M): Headcount \u2014 scaling from 120 to 200, weighted toward customer success managers and integration engineers to reduce onboarding from 4 months to 45 days [NovaCrest_CIM_2026:Use_of_Proceeds]\n\n**Governance Considerations**\n- Board seat for Meridian\n- Standard protective provisions (veto on M&A, debt, equity issuance)\n- Pro-rata rights for follow-on rounds\n- Information rights (monthly financials, quarterly board updates)\n\n[REQUIRES LEGAL REVIEW \u2014 Term sheet specifics pending negotiation]",
       "citations": [
-        "model_export:leverage_ratio:mean",
-        "model_export:interest_rate:mean",
-        "model_export:interest_rate:median"
+        "NovaCrest_CIM_2026:Executive_Summary",
+        "NovaCrest_CIM_2026:Use_of_Proceeds"
       ],
-      "confidence": 0.9,
+      "confidence": 0.85,
       "needs_review": false
     },
     {
       "section_id": "risk_mitigation",
       "title": "Risk Mitigation",
-      "content": "| Risk | Probability | Impact | Mitigation |\n|------|------------|--------|------------|\n| Cyclical revenue decline | Medium | High | Diversified end-market exposure across 6 verticals [cim_report.pdf:page_8] |\n| Integration execution | Medium | Medium | Dedicated integration PMO; 100-day plan developed with management [management_deck.pdf:page_14] |\n| Key person dependency | Low | High | CEO succession plan in place; depth in senior leadership team [management_deck.pdf:page_5] |\n| FX exposure (EUR/GBP) | Medium | Low | Natural hedge via matched currency revenues/costs; residual hedged via forwards |\n| Customer concentration | Low | Medium | Top 10 at 42% \u2014 contractual minimums with top 3 customers [cim_report.pdf:page_11] |\n\n**Overall risk rating**: Moderate. The defensive characteristics of the business and proven management team provide sufficient downside protection.",
+      "content": "**1. Customer Concentration (HIGH)**\nTop 3 customers (Veracity Capital, Orion Global, Zenith Partners) account for 40% of ARR, though no single customer exceeds 15% [NovaCrest_CIM_2026:Risk_Factors]. Management plans to dilute concentration through mid-market expansion and European entry. *Recommendation: Negotiate a revenue diversification milestone tied to governance protections.*\n\n**2. Onboarding & Support Scalability (HIGH)**\nMultiple sources flagged this risk. Dr. Chen noted onboarding took 4 months \u2014 \"too long for most banks\" [Expert_Call_DataInfra_Specialist:Dr_Chen]. Former customer James Park cited support degradation post-Series A: \"a critical API routing ticket took 4 days to resolve\" [Expert_Call_Former_Customer:James_Park]. Even satisfied customer Lisa Torres flagged response time spikes during high-demand periods [Customer_Reference_Avalon_AM:Lisa_Torres]. Management acknowledged this and is allocating $21M to headcount, specifically customer success and integration engineers [NovaCrest_CIM_2026:Use_of_Proceeds]. *Recommendation: Tie a portion of investment tranche to hiring milestones for CS/support roles.*\n\n**3. Pricing Strategy Risk (MEDIUM)**\nFormer customer James Park cited a 40% price increase at renewal as a key factor in churning [Expert_Call_Former_Customer:James_Park]. CEO Marcus Vance characterized the Cornerstone departure as a \"mutual decision\" driven by scope creep and customer engineering immaturity [Mgmt_Presentation_Transcript:Marcus_Vance]. The narratives diverge \u2014 Meridian should diligence the renewal pricing framework further. *Recommendation: Review pricing escalation clauses in 5 largest customer contracts.*\n\n**4. SOC 2 Type II Certification Gap (MEDIUM)**\nNovaCrest currently holds only SOC 2 Type I. Lisa Torres at Avalon AM stated her compliance team is \"threatening to halt the RiskLens expansion\" over this gap [Customer_Reference_Avalon_AM:Lisa_Torres]. European LOIs are also contingent on Type II [Mgmt_Presentation_Transcript:Marcus_Vance]. *Recommendation: Make SOC 2 Type II completion a closing condition or near-term covenant.*\n\n**5. Key Person Risk (LOW-MEDIUM)**\nFounder-led company with deep domain expertise concentrated in CEO (Marcus Vance) and CTO (Elena Rostova) [NovaCrest_CIM_2026:Risk_Factors]. VP Sales (Robert Hughes) is relatively new (joined 2024). *Recommendation: Standard key-person insurance and retention packages.*",
       "citations": [
-        "cim_report.pdf:page_8",
-        "management_deck.pdf:page_14",
-        "management_deck.pdf:page_5",
-        "cim_report.pdf:page_11"
+        "NovaCrest_CIM_2026:Risk_Factors",
+        "Expert_Call_DataInfra_Specialist:Dr_Chen",
+        "Expert_Call_Former_Customer:James_Park",
+        "Customer_Reference_Avalon_AM:Lisa_Torres",
+        "NovaCrest_CIM_2026:Use_of_Proceeds",
+        "Mgmt_Presentation_Transcript:Marcus_Vance"
       ],
-      "confidence": 0.85,
+      "confidence": 0.89,
       "needs_review": false
     }
   ],
@@ -87,5 +88,5 @@
     "pptx": "/demo_data/phase2_sample_deck.pptx",
     "audit_trail": "/demo_data/audit_trail.json"
   },
-  "generated_at": "2026-03-24T15:00:00Z"
+  "generated_at": "2026-03-29T15:00:00Z"
 }

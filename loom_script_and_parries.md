@@ -1,42 +1,61 @@
-# The Execution: Loom Script & Parries
+# Loom Execution Playbook: The Tracelight Pitch
 
-## The 2-Minute Loom Script
-
-**[0:00 - Screen sharing the Landing Page]**
-"Peter, Aleksander, Janek. My Lead Architect, Hafeedh, and I have been closely following Tracelight’s trajectory. You’ve successfully solved the probabilistic interpretation bottleneck inside the spreadsheet. But in enterprise, the friction before and after the model is killing deal velocity. Hafeedh built a containerized microservice demonstrating three out-of-band 'sidecar' workflows. Crucially, we maintain a strict DMZ: we never touch an `.xlsx` file. We operate exclusively on the periphery."
-
-**[0:25 - Click into Workflow I: Synthetic Data Generator, hit Generate]**
-"Aleksander, I saw your LinkedIn post about PoC InfoSec bottlenecks. Banks won't give you real data. Instead of waiting six months, we generate mathematically rigorous synthetic time-series data. Hafeedh decoupled the architecture: we use Gemini 3.1 Pro purely as a semantic profiler to map natural language into a statistical schema. But the actual generation is zero-LLM. We use pure NumPy, applying Cholesky decomposition and a Gaussian Copula to maintain precise cross-asset correlations while preserving marginal distributions. We validate it with KS-tests and apply differential privacy. Prospects import this CSV into Tracelight on day one."
-
-**[1:05 - Click into Workflow II: Deliverable Engine, hit Generate]**
-"Second, the post-Excel mechanical workload. After your engine runs, analysts waste 72 hours pasting outputs into IC Memos. Hafeedh built a citation-enforced RAG pipeline. We embed source CIMs into ChromaDB and map your quantitative model exports to exact provenance tags. The drafting agent is constrained by a strict abstention protocol—every claim requires a verified `[source_tag]`. If it lacks data, it refuses to hallucinate and flags the section for human review. It exports audit-ready Word and PowerPoint files."
-
-**[1:40 - Click into Workflow III: Compliance Engine, show the dashboard]**
-"Finally, your ex-Jane Street engineers shouldn't be wasting cycles answering 800-question SIG security questionnaires. Hafeedh built a compliance engine that parses vendor assessments deterministically, retrieves your SOC 2 policies via semantic search, and auto-drafts cited responses with strict confidence routing. High confidence is auto-approved; edge cases go to human review."
-
-**[1:55 - Wrap Up]**
-"Three sidecars. Zero overlap with your core Excel IP. Massive expansion of your ACV by owning the entire deal lifecycle. Let's get on a call to discuss the architecture."
+## The Setup
+*   **Target Length:** 2:00 - 2:30 maximum.
+*   **Tone:** Elite, confident, deeply technical. You are not a salesperson; you are a peer presenting architectural work.
+*   **Prerequisites:** Start the app in **Demo Mode** (toggle in the sidebar). This uses pre-cached, deterministic data with simulated processing delays so the demo is lightning fast and never breaks on camera.
+*   **Concept to Keep in Mind:** We are framing this around Aleksander's recent LinkedIn post regarding InfoSec delays.
 
 ---
 
-## The Parries (Follow-Up Call Defense)
+## The Script & Screen Flow
 
-When you get on the call, Aleksander (CTO) and Janek (CPO) will test your technical depth. Use these exact rebuttals.
+### Part 1: The Hook & Architecture (0:00 - 0:20)
+*(Screen: App Landing Page showing the two Workflow cards. Mouse hovering near the center.)*
 
-### Objection 1 (from Aleksander, CTO)
-*"LLMs are notoriously bad at math and maintaining cross-sectional consistency over time. If I give this synthetic data to a quant fund, they're going to realize the correlations are broken immediately."*
+**Voiceover:** "Peter, Aleksander, Janek. I saw Aleksander’s post about the 6-month InfoSec dead zone killing enterprise deal velocity. My Lead Architect, Hafeedh, and I spent the weekend looking at Tracelight's architecture, and we built a containerized proof-of-concept to solve exactly that, plus the post-model formatting bottleneck. We built two sidecars that wrap around your core Excel engine without touching a single line of your proprietary spreadsheet IP. Let me show you."
 
-**The Parry:** 
-"We completely agree, which is why the LLM has zero involvement in the mathematical generation. Hafeedh explicitly designed this so the LLM acts solely as a translation layer—it outputs a strictly typed JSON schema of target marginals and correlation matrices. The actual instantiation is handled by a deterministic NumPy engine using Cholesky decomposition to factor the correlation matrix, applied via a Gaussian Copula. The math is completely isolated from the probabilistic language model."
+### Part 2: Workflow I - Pre-Model Synthetic Data (0:20 - 1:05)
+*(Screen: Click into Workflow I. Select the "NovaCrest Analytics" preset. Hit Generate.)*
 
-### Objection 2 (from Janek, CPO)
-*"RAG for IC Memos is incredibly dangerous for private equity. If the context window drops a key risk factor, or the LLM hallucinates a revenue multiple, the whole deal is compromised."*
+**Voiceover:** "Workflow I is a pre-model synthetic data generator. We need realistic test data to run PoCs without waiting for bank clearance. Crucially, the LLM does *not* generate the math—that’s a recipe for hallucination."
 
-**The Parry:** 
-"That’s exactly why we don't rely on standard generative RAG. We implemented a strict citation-enforcement protocol. The LLM is instructed via a source-first architecture: every factual claim *must* be accompanied by an exact provenance vector tag. Post-generation, a deterministic script parses the output and cross-references those tags against the ChromaDB metadata and the extracted financial JSON. If a tag is fabricated or missing, the system defaults to an explicit abstention—it outputs `[INSUFFICIENT DATA]` and drops the confidence score, routing it to a human. We prioritize abstention over hallucination."
+*(Screen: Scroll down to show the generated data table, the distribution charts, and the correlation heatmap.)*
 
-### Objection 3 (from Peter, CEO)
-*"This is cool, but why shouldn't we just build this directly into our Excel add-in so the user never has to leave the spreadsheet?"*
+**Voiceover:** "Instead, the LLM just extracts the semantic parameters. We then use a Cholesky decomposition and a Gaussian copula to generate a highly correlated multivariate time-series. The backend automatically runs two-sample Kolmogorov-Smirnov tests to validate the statistical properties. The result is a mathematically rigorous CSV payload, fully sanitized with differential privacy, ready to drop straight into the Tracelight Excel engine today."
 
-**The Parry:** 
-"Because forcing qualitative workflows into a quantitative environment degrades the user experience and bloats your core IP. The inputs for an IC memo—like 100-page PDF CIMs and management presentations—and the outputs—Word documents and PowerPoint decks—inherently exist outside of Excel. By deploying this as an out-of-band sidecar, you maintain the pristine latency of your Excel engine while capturing the final-mile enterprise value. You own the whole lifecycle without compromising the core product."
+### Part 3: Workflow II - Post-Model Deliverables (1:05 - 2:00)
+*(Screen: Click back to Home, then into Workflow II. Upload the `NovaCrest_Due_Diligence_Pack.pdf`. Hit Process, then Generate.)*
+
+**Voiceover:** "Workflow II handles the 'final mile.' Once the analyst finishes the model in Tracelight, they upload the financial outputs alongside the raw due diligence pack—in this case, an 11-page PDF for the NovaCrest deal."
+
+*(Screen: Walk through the section-by-section review dashboard. Point out a high confidence score and hover over an inline citation tag. Point out an amber-flagged section if visible.)*
+
+**Voiceover:** "We use a RAG architecture with strict citation enforcement and an abstention protocol. If the context isn't in the docs, it refuses to hallucinate and flags the section amber. Every claim is tied to an immutable provenance vector."
+
+*(Screen: Click the 'IC Memo' preview tab. Scroll through the inline document viewer briefly. Click the 'Exec Deck' preview tab and scroll.)*
+
+**Voiceover:** "The engine automatically compiles the quantitative data and qualitative analysis into a fully formatted Word IC Memo and a native PowerPoint Executive Deck, viewable right here in the inline viewer before downloading."
+
+### Part 4: The Wrap (2:00 - 2:15)
+*(Screen: Return to the landing page.)*
+
+**Voiceover:** "Two sidecars. Zero IP overlap with your core engine. We unblock the top of your funnel and automate the bottom. I’ll send over the architectural brief. Let’s find 15 minutes next week to dig into the copula implementation."
+
+---
+
+## The Parries (Handling Objections on the Follow-Up Call)
+
+When you get them on the phone, they will stress-test the architecture. Use these exact rebuttals.
+
+### Objection 1: Aleksander (CTO) on Math Rigor
+**The Attack:** *"I don't trust LLMs to generate financial data. They hallucinate numbers, and the covariance structures are always wrong. Our clients will laugh at it."*
+**The Parry:** "We completely agree, Aleksander. That's why the LLM is strictly isolated to semantic parameter extraction. It reads the prompt and outputs a JSON config. The actual data generation uses zero LLMs. We map a Cholesky decomposition of the target correlation matrix to standard normals, and apply a Gaussian copula to fit the marginal distributions. We validate every batch with internal KS-tests before it ever reaches the UI. It's deterministic quant math, not a prompt engineering trick."
+
+### Objection 2: Janek (CPO) on RAG Hallucination
+**The Attack:** *"Automatically writing an IC Memo is dangerous. RAG pipelines constantly make up citations or blend facts from different expert calls. How do you prevent that?"*
+**The Parry:** "We enforce a strict abstention protocol governed by provenance vectors. During the embedding phase, every chunk is tagged with an immutable tuple of Document ID, Page, and Header. The generation agent is prompted to abstain if semantic similarity drops below our dynamic threshold. If it can't cite the specific provenance vector, it outputs 'Insufficient Data' and flags the section amber in the review dashboard for human intervention. It fails safe, not silently."
+
+### Objection 3: Peter (CEO) on Build vs. Buy
+**The Attack:** *"This is interesting, but we have a world-class engineering team. If we wanted this, we could just build it internally."*
+**The Parry:** "You absolutely could, Peter. But your engineering bandwidth is your most constrained resource, and it needs to be laser-focused on your core IP: the in-spreadsheet COM architecture and formula auditing. Building secure, containerized sidecars requires a completely different tech stack—vector databases, document parsing pipelines, and copula math. We’ve already built it, it respescts your IP boundary entirely, and we can integrate it via API next week to start unblocking your stalled enterprise PoCs immediately."
